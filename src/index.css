@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base print-only visibility - hidden on screen */
+.print-only {
+  display: none;
+}
+
+@layer utilities {
+  .animate-slide-up {
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+  }
+
+  .delay-75 {
+    animation-delay: 75ms;
+  }
+
+  .delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .delay-150 {
+    animation-delay: 150ms;
+  }
+
+  .delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .delay-500 {
+    animation-delay: 500ms;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media print {
+  @page {
+    margin: 3mm !important;
+    /* Forces 3mm margin on EVERY page and hides most browser colontitles */
+    size: auto;
+  }
+
+  /* Hide everything direct children of body by default */
+  body>* {
+    display: none !important;
+  }
+
+  /* Show ONLY our print portal (which is a direct child of body) */
+  body>.print-only {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    /* Relying on @page margin for consistent spacing */
+    background: white !important;
+    z-index: 9999 !important;
+  }
+
+  /* Restore visibility for everything inside print-only */
+  .print-only * {
+    visibility: visible !important;
+  }
+
+  /* Color adjustments & Reset animations */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    /* CRITICAL: Ensure animated elements are visible */
+  }
+
+  body {
+    background: white !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Breaks */
+  .avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .break-after-avoid {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  .pdf-page-break {
+    break-before: page !important;
+  }
+
+  /* Force background colors in print */
+  .print-bg-amber-50 {
+    background-color: #fffbeb !important;
+  }
+
+  .print-bg-slate-50 {
+    background-color: #f8fafc !important;
+  }
+}
