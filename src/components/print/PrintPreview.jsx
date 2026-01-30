@@ -77,10 +77,10 @@ const PrintPreview = (props) => {
                                         onClick={handleShare}
                                         disabled={sharing || copied}
                                         className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all font-bold text-sm ${copied
-                                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                                : sharedUrl
-                                                    ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                                                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                            : sharedUrl
+                                                ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                                                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
                                             }`}
                                     >
                                         {sharing ? <Loader2 size={16} className="animate-spin" /> :
@@ -128,7 +128,7 @@ const PrintPreview = (props) => {
 
             {/* Print Version (Portal) */}
             {createPortal(
-                <div className="print-only hidden">
+                <div className="print-only">
                     <ReportContent {...props} />
                 </div>,
                 document.body
