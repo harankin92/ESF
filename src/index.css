@@ -58,7 +58,8 @@
   }
 
   /* Hide everything direct children of body by default */
-  body>* {
+  .screen-only,
+  body>*:not(.print-only) {
     display: none !important;
   }
 
