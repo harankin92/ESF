@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./server
+    container_name: esf-backend
+    environment:
+      - DB_PATH=/data/esf.db
+      - PORT=3001
+    volumes:
+      - esf_data:/data
+    restart: always
+    expose:
+      - "3001"
+
+  frontend:
+    build: .
+    container_name: esf-frontend
+    ports:
+      - "3080:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  esf_data:

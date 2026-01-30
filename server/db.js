@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, 'esf.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'esf.db');
 
 let db = null;
 
