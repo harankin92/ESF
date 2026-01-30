@@ -80,7 +80,134 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
         loadData();
     }, [initialData, estimateId]);
 
-    // ... (rest of component/hooks)
+    // Recalculate totals
+    const totals = useTotals(sections, manualRoles, qaPercent, pmPercent, qaRate, pmRate, discount);
+
+    // Handlers
+    const handleAddTask = (sectionId) => {
+        setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                tasks: [...s.tasks, {
+                    id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                    name: '',
+                    description: '',
+                    estimates: {},
+                    includeQA: true,
+                    includePM: true
+                }]
+            };
+        }));
+    };
+
+    const handleAddSection = () => {
+        setSections(prev => [...prev, {
+            id: `sec-${Date.now()}`,
+            title: 'New Section',
+            tasks: []
+        }]);
+    };
+
+    const handleUpdateEstimate = (sectionId, taskId, roleId, field, value) => {
+        setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                tasks: s.tasks.map(t => {
+                    if (t.id !== taskId) return t;
+                    return {
+                        ...t,
+                        estimates: {
+                            ...t.estimates,
+                            [roleId]: {
+                                ...t.estimates[roleId],
+                                [field]: parseInt(value) || 0
+                            }
+                        }
+                    };
+                })
+            };
+        }));
+    };
+
+    const handleUpdateTaskInfo = (sectionId, taskId, field, value) => {
+        setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                tasks: s.tasks.map(t => {
+                    if (t.id !== taskId) return t;
+                    return { ...t, [field]: value };
+                })
+            };
+        }));
+    };
+
+    const handleDeleteTask = (sectionId, taskId) => {
+        setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                tasks: s.tasks.filter(t => t.id !== taskId)
+            };
+        }));
+    };
+
+    const handleUpdateSectionTitle = (sectionId, title) => {
+        setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return { ...s, title };
+        }));
+    };
+
+    const handleToggleQA = (sectionId, taskId) => {
+        setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                tasks: s.tasks.map(t => {
+                    if (t.id !== taskId) return t;
+                    return { ...t, includeQA: t.includeQA === false ? true : false };
+                })
+            };
+        }));
+    };
+
+    const handleTogglePM = (sectionId, taskId) => {
+        setSections(prev => prev.map(s => {
+            if (s.id !== sectionId) return s;
+            return {
+                ...s,
+                tasks: s.tasks.map(t => {
+                    if (t.id !== taskId) return t;
+                    return { ...t, includePM: t.includePM === false ? true : false };
+                })
+            };
+        }));
+    };
+
+    // Role Handlers
+    const handleAddRole = () => {
+        const id = `role-${Date.now()}`;
+        setManualRoles([...manualRoles, {
+            id,
+            label: 'New Role',
+            rate: 40,
+            hoursPerDay: 8,
+            color: 'bg-slate-100 text-slate-700'
+        }]);
+    };
+
+    const handleUpdateRole = (id, field, value) => {
+        setManualRoles(manualRoles.map(r =>
+            r.id === id ? { ...r, [field]: value } : r
+        ));
+    };
+
+    const handleDeleteRole = (id) => {
+        setManualRoles(manualRoles.filter(r => r.id !== id));
+    };
 
     const handleSave = async () => {
         setSaving(true);
