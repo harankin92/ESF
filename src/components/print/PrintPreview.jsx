@@ -19,15 +19,23 @@ const PrintPreview = (props) => {
         }
     };
 
+    const [sharedUrl, setSharedUrl] = useState('');
+
     const handleShare = async () => {
         if (!estimateId) return;
         setSharing(true);
         try {
             const res = await api.shareEstimate(estimateId);
             const url = `${window.location.protocol}//${window.location.host}/share/${res.share_uuid}`;
-            await navigator.clipboard.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 3000);
+            setSharedUrl(url);
+
+            try {
+                await navigator.clipboard.writeText(url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 3000);
+            } catch (clipErr) {
+                console.warn('Clipboard access denied, user must copy manually', clipErr);
+            }
         } catch (err) {
             console.error('Share error:', err);
             // Optionally show error toast
@@ -64,18 +72,34 @@ const PrintPreview = (props) => {
                     <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-white flex-shrink-0">
                         <div>
                             {estimateId ? (
-                                <button
-                                    onClick={handleShare}
-                                    disabled={sharing || copied}
-                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all font-bold text-sm ${copied
-                                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                        : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                        }`}
-                                >
-                                    {sharing ? <Loader2 size={16} className="animate-spin" /> :
-                                        copied ? <Check size={16} /> : <Share2 size={16} />}
-                                    {copied ? 'Link Copied to Clipboard!' : 'Share Public Link'}
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={handleShare}
+                                        disabled={sharing || copied}
+                                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all font-bold text-sm ${copied
+                                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                                : sharedUrl
+                                                    ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                                                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                            }`}
+                                    >
+                                        {sharing ? <Loader2 size={16} className="animate-spin" /> :
+                                            copied ? <Check size={16} /> : <Share2 size={16} />}
+                                        {copied ? 'Copied!' : sharedUrl ? 'Generate New Link' : 'Share Public Link'}
+                                    </button>
+
+                                    {sharedUrl && (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-2 animate-in fade-in slide-in-from-left-4">
+                                            <LinkIcon size={14} className="text-slate-400" />
+                                            <input
+                                                readOnly
+                                                value={sharedUrl}
+                                                className="bg-transparent text-xs font-mono text-slate-600 w-64 outline-none select-all"
+                                                onClick={(e) => e.target.select()}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             ) : (
                                 <div className="text-xs text-slate-400 italic px-2">
                                     Save estimate to enable sharing
