@@ -68,6 +68,11 @@
     display: none !important;
   }
 
+  /* Show the print root */
+  #print-root {
+    display: block !important;
+  }
+
   /* Also hide any screen-only elements */
   .screen-only {
     display: none !important;

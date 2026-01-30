@@ -131,7 +131,7 @@ const PrintPreview = (props) => {
                 <div className="print-only">
                     <ReportContent {...props} />
                 </div>,
-                document.body
+                document.getElementById('print-root') || document.body
             )}
         </>
     );
