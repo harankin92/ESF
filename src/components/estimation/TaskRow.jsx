@@ -17,35 +17,35 @@ const TaskRow = ({ task, sectionId, manualRoles, qaPercent, pmPercent, onUpdateE
     const totalMax = rowMax + qaMax + pmMax;
 
     return (
-        <tr className="hover:bg-slate-50/30 group transition-all">
+        <tr className="hover:bg-slate-50/30 dark:hover:bg-slate-800/30 group transition-all">
             <td className="px-6 py-5">
                 <input
                     placeholder="Task title..."
                     value={task.name}
                     onChange={(e) => onUpdateInfo(sectionId, task.id, 'name', e.target.value)}
-                    className="block w-full font-bold bg-transparent border-none focus:ring-0 p-0 text-slate-800 placeholder:text-slate-300 focus:outline-none"
+                    className="block w-full font-bold bg-transparent border-none focus:ring-0 p-0 text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none"
                 />
                 <textarea
                     placeholder="Add technical details..."
                     rows="1"
                     value={task.description}
                     onChange={(e) => onUpdateInfo(sectionId, task.id, 'description', e.target.value)}
-                    className="block w-full text-xs text-slate-400 bg-transparent border-none focus:ring-0 p-0 resize-none overflow-hidden mt-1 italic placeholder:text-slate-200 focus:outline-none"
+                    className="block w-full text-xs text-slate-400 dark:text-slate-500 bg-transparent border-none focus:ring-0 p-0 resize-none overflow-hidden mt-1 italic placeholder:text-slate-200 dark:placeholder:text-slate-700 focus:outline-none"
                 />
             </td>
             {manualRoles.map(role => (
-                <td key={role.id} className="px-3 py-5 border-l border-slate-50">
+                <td key={role.id} className="px-3 py-5 border-l border-slate-50 dark:border-slate-800">
                     <div className="flex items-center justify-center gap-1.5">
                         <input
                             type="number"
-                            className="w-12 text-center bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                            className="w-12 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 text-slate-900 dark:text-slate-100 transition-all"
                             value={task.estimates[role.id]?.min || ''}
                             onChange={(e) => onUpdateEstimate(sectionId, task.id, role.id, 'min', e.target.value)}
                         />
-                        <span className="text-slate-300 font-light">—</span>
+                        <span className="text-slate-300 dark:text-slate-600 font-light">—</span>
                         <input
                             type="number"
-                            className="w-12 text-center bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                            className="w-12 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 text-slate-900 dark:text-slate-100 transition-all"
                             value={task.estimates[role.id]?.max || ''}
                             onChange={(e) => onUpdateEstimate(sectionId, task.id, role.id, 'max', e.target.value)}
                         />
@@ -54,20 +54,20 @@ const TaskRow = ({ task, sectionId, manualRoles, qaPercent, pmPercent, onUpdateE
             ))}
 
             {/* QA Hours */}
-            <td className="px-3 py-5 border-l border-slate-100 bg-amber-50/30">
+            <td className="px-3 py-5 border-l border-slate-100 dark:border-slate-800 bg-amber-50/30 dark:bg-amber-900/5">
                 <div className="flex flex-col items-center gap-1">
                     <label className="flex items-center gap-1 cursor-pointer">
                         <input
                             type="checkbox"
                             checked={includeQA}
                             onChange={() => onToggleQA(sectionId, task.id)}
-                            className="w-3 h-3 rounded border-amber-300 text-amber-500 focus:ring-amber-500"
+                            className="w-3 h-3 rounded border-amber-300 text-amber-500 focus:ring-amber-500 bg-transparent dark:bg-slate-800 dark:border-slate-600"
                         />
                     </label>
                     {includeQA && (
-                        <div className="flex items-center gap-1 text-xs font-bold text-amber-700">
+                        <div className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-500">
                             <span className="opacity-60">{qaMin}</span>
-                            <span className="text-amber-300">/</span>
+                            <span className="text-amber-300 dark:text-amber-700/50">/</span>
                             <span>{qaMax}</span>
                         </div>
                     )}
@@ -75,20 +75,20 @@ const TaskRow = ({ task, sectionId, manualRoles, qaPercent, pmPercent, onUpdateE
             </td>
 
             {/* PM Hours */}
-            <td className="px-3 py-5 border-l border-slate-100 bg-teal-50/30">
+            <td className="px-3 py-5 border-l border-slate-100 dark:border-slate-800 bg-teal-50/30 dark:bg-teal-900/5">
                 <div className="flex flex-col items-center gap-1">
                     <label className="flex items-center gap-1 cursor-pointer">
                         <input
                             type="checkbox"
                             checked={includePM}
                             onChange={() => onTogglePM(sectionId, task.id)}
-                            className="w-3 h-3 rounded border-teal-300 text-teal-500 focus:ring-teal-500"
+                            className="w-3 h-3 rounded border-teal-300 text-teal-500 focus:ring-teal-500 bg-transparent dark:bg-slate-800 dark:border-slate-600"
                         />
                     </label>
                     {includePM && (
-                        <div className="flex items-center gap-1 text-xs font-bold text-teal-700">
+                        <div className="flex items-center gap-1 text-xs font-bold text-teal-700 dark:text-teal-500">
                             <span className="opacity-60">{pmMin}</span>
-                            <span className="text-teal-300">/</span>
+                            <span className="text-teal-300 dark:text-teal-700/50">/</span>
                             <span>{pmMax}</span>
                         </div>
                     )}
@@ -96,17 +96,17 @@ const TaskRow = ({ task, sectionId, manualRoles, qaPercent, pmPercent, onUpdateE
             </td>
 
             {/* Row Total (now includes QA+PM) */}
-            <td className="px-6 py-5 border-l border-slate-100 bg-indigo-50/10">
-                <div className="flex items-center justify-center gap-3 font-black text-indigo-600 text-xs">
+            <td className="px-6 py-5 border-l border-slate-100 dark:border-slate-800 bg-indigo-50/10 dark:bg-indigo-900/5">
+                <div className="flex items-center justify-center gap-3 font-black text-indigo-600 dark:text-indigo-400 text-xs">
                     <span className="opacity-60">{totalMin}</span>
-                    <span className="text-indigo-200">/</span>
+                    <span className="text-indigo-200 dark:text-indigo-800">/</span>
                     <span>{totalMax}</span>
                 </div>
             </td>
             <td className="px-4 py-5 text-right">
                 <button
                     onClick={() => onDelete(sectionId, task.id)}
-                    className="text-slate-200 hover:text-red-500 transition-colors"
+                    className="text-slate-200 dark:text-slate-700 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                 >
                     <Trash2 size={16} />
                 </button>

@@ -57,8 +57,11 @@ const AppContent = () => {
 };
 
 
+import { ThemeProvider } from './context/ThemeContext';
+
 const App = () => {
     // Check for public share route
+    // ... existing route check code ...
     const path = window.location.pathname;
     if (path.startsWith('/share/')) {
         const parts = path.split('/share/');
@@ -69,9 +72,11 @@ const App = () => {
     }
 
     return (
-        <AuthProvider>
-            <AppContent />
-        </AuthProvider>
+        <ThemeProvider>
+            <AuthProvider>
+                <AppContent />
+            </AuthProvider>
+        </ThemeProvider>
     );
 };
 
