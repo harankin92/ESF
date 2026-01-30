@@ -29,10 +29,17 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
     const [saving, setSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
 
-    // Load initial data if provided (edit mode)
+    const [currentEstimateId, setCurrentEstimateId] = useState(estimateId);
+
+    // Sync state if prop changes
+    useEffect(() => {
+        setCurrentEstimateId(estimateId);
+    }, [estimateId]);
+
     // Load initial data if provided (edit mode)
     useEffect(() => {
         const loadData = async () => {
+            // Use prop-based estimateId for initial load to avoid redundant fetches on create
             if (estimateId && !initialData) {
                 try {
                     const data = await api.getEstimate(estimateId);
@@ -53,6 +60,7 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                     console.error('Failed to load estimate:', error);
                 }
             } else if (initialData) {
+                // ... (rest of initialData logic unchanged)
                 setProjectName(initialData.name || 'New Project Estimate');
                 if (initialData.data) {
                     setSections(initialData.data.sections || DEFAULT_SECTIONS);
@@ -72,135 +80,7 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
         loadData();
     }, [initialData, estimateId]);
 
-    // Recalculate totals
-    // Recalculate totals
-    const totals = useTotals(sections, manualRoles, qaPercent, pmPercent, qaRate, pmRate, discount);
-
-    // Handlers
-    const handleAddTask = (sectionId) => {
-        setSections(prev => prev.map(s => {
-            if (s.id !== sectionId) return s;
-            return {
-                ...s,
-                tasks: [...s.tasks, {
-                    id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                    name: '',
-                    description: '',
-                    estimates: {},
-                    includeQA: true,
-                    includePM: true
-                }]
-            };
-        }));
-    };
-
-    const handleAddSection = () => {
-        setSections(prev => [...prev, {
-            id: `sec-${Date.now()}`,
-            title: 'New Section',
-            tasks: []
-        }]);
-    };
-
-    const handleUpdateEstimate = (sectionId, taskId, roleId, field, value) => {
-        setSections(prev => prev.map(s => {
-            if (s.id !== sectionId) return s;
-            return {
-                ...s,
-                tasks: s.tasks.map(t => {
-                    if (t.id !== taskId) return t;
-                    return {
-                        ...t,
-                        estimates: {
-                            ...t.estimates,
-                            [roleId]: {
-                                ...t.estimates[roleId],
-                                [field]: parseInt(value) || 0
-                            }
-                        }
-                    };
-                })
-            };
-        }));
-    };
-
-    const handleUpdateTaskInfo = (sectionId, taskId, field, value) => {
-        setSections(prev => prev.map(s => {
-            if (s.id !== sectionId) return s;
-            return {
-                ...s,
-                tasks: s.tasks.map(t => {
-                    if (t.id !== taskId) return t;
-                    return { ...t, [field]: value };
-                })
-            };
-        }));
-    };
-
-    const handleDeleteTask = (sectionId, taskId) => {
-        setSections(prev => prev.map(s => {
-            if (s.id !== sectionId) return s;
-            return {
-                ...s,
-                tasks: s.tasks.filter(t => t.id !== taskId)
-            };
-        }));
-    };
-
-    const handleUpdateSectionTitle = (sectionId, title) => {
-        setSections(prev => prev.map(s => {
-            if (s.id !== sectionId) return s;
-            return { ...s, title };
-        }));
-    };
-
-    const handleToggleQA = (sectionId, taskId) => {
-        setSections(prev => prev.map(s => {
-            if (s.id !== sectionId) return s;
-            return {
-                ...s,
-                tasks: s.tasks.map(t => {
-                    if (t.id !== taskId) return t;
-                    return { ...t, includeQA: t.includeQA === false ? true : false };
-                })
-            };
-        }));
-    };
-
-    const handleTogglePM = (sectionId, taskId) => {
-        setSections(prev => prev.map(s => {
-            if (s.id !== sectionId) return s;
-            return {
-                ...s,
-                tasks: s.tasks.map(t => {
-                    if (t.id !== taskId) return t;
-                    return { ...t, includePM: t.includePM === false ? true : false };
-                })
-            };
-        }));
-    };
-
-    // Role Handlers
-    const handleAddRole = () => {
-        const id = `role-${Date.now()}`;
-        setManualRoles([...manualRoles, {
-            id,
-            label: 'New Role',
-            rate: 40,
-            hoursPerDay: 8,
-            color: 'bg-slate-100 text-slate-700'
-        }]);
-    };
-
-    const handleUpdateRole = (id, field, value) => {
-        setManualRoles(manualRoles.map(r =>
-            r.id === id ? { ...r, [field]: value } : r
-        ));
-    };
-
-    const handleDeleteRole = (id) => {
-        setManualRoles(manualRoles.filter(r => r.id !== id));
-    };
+    // ... (rest of component/hooks)
 
     const handleSave = async () => {
         setSaving(true);
@@ -219,10 +99,13 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 clientName
             };
 
-            if (estimateId) {
-                await api.updateEstimate(estimateId, projectName, estimateData);
+            if (currentEstimateId) {
+                await api.updateEstimate(currentEstimateId, projectName, estimateData);
             } else {
-                await api.createEstimate(projectName, estimateData);
+                const newEstimate = await api.createEstimate(projectName, estimateData);
+                if (newEstimate && newEstimate.id) {
+                    setCurrentEstimateId(newEstimate.id);
+                }
             }
 
             setSaveMessage('Saved!');
@@ -341,7 +224,7 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 techStack={techStack}
                 questions={questions}
                 discount={totals.discountedCost > 0 ? discount : 0}
-                estimateId={estimateId}
+                estimateId={currentEstimateId}
             />
         </div>
     );
