@@ -57,9 +57,13 @@
     size: auto;
   }
 
-  /* Hide everything direct children of body by default */
-  .screen-only,
-  body>*:not(.print-only) {
+  /* Hide the main app root */
+  #root {
+    display: none !important;
+  }
+
+  /* Also hide any screen-only elements */
+  .screen-only {
     display: none !important;
   }
 
