@@ -8,6 +8,7 @@ const PrintPreview = (props) => {
     const { isOpen, onClose, onPrint, estimateId, discount } = props;
     const [sharing, setSharing] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [sharedUrl, setSharedUrl] = useState('');
 
     if (!isOpen) return null;
 
@@ -18,8 +19,6 @@ const PrintPreview = (props) => {
             window.print();
         }
     };
-
-    const [sharedUrl, setSharedUrl] = useState('');
 
     const handleShare = async () => {
         if (!estimateId) return;
