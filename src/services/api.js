@@ -201,5 +201,125 @@ export const api = {
             throw new Error(error.error || 'Failed to delete lead');
         }
         return res.json();
+    },
+
+    async rejectLead(id, reason) {
+        const res = await fetch(`${API_URL}/leads/${id}/reject`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ reason })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to reject lead');
+        }
+        return res.json();
+    },
+
+    async convertToContract(id) {
+        const res = await fetch(`${API_URL}/leads/${id}/contract`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to convert to contract');
+        }
+        return res.json();
+    },
+
+    // Projects
+    async getProjects() {
+        const res = await fetch(`${API_URL}/projects`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch projects');
+        return res.json();
+    },
+
+    async getProject(id) {
+        const res = await fetch(`${API_URL}/projects/${id}`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch project');
+        return res.json();
+    },
+
+    async updateProject(id, data) {
+        const res = await fetch(`${API_URL}/projects/${id}`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update project');
+        }
+        return res.json();
+    },
+
+    async updateProjectStatus(id, status) {
+        const res = await fetch(`${API_URL}/projects/${id}/status`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ status })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update project status');
+        }
+        return res.json();
+    },
+
+    async updateProjectCredentials(id, credentials) {
+        const res = await fetch(`${API_URL}/projects/${id}/credentials`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ credentials })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update credentials');
+        }
+        return res.json();
+    },
+
+    async updateProjectDocumentation(id, data) {
+        const res = await fetch(`${API_URL}/projects/${id}/documentation`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update documentation');
+        }
+        return res.json();
+    },
+
+    async addProjectChangelogEntry(id, entry) {
+        const res = await fetch(`${API_URL}/projects/${id}/changelog`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ entry })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to add changelog entry');
+        }
+        return res.json();
+    },
+
+    async updateProjectInvoices(id, invoices) {
+        const res = await fetch(`${API_URL}/projects/${id}/invoices`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ invoices })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update invoices');
+        }
+        return res.json();
     }
 };

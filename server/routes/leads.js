@@ -2,7 +2,7 @@ import express from 'express';
 import {
     queryOne, queryAll, insertLead, updateLead,
     getLeadWithCreator, getAllLeads, getLeadsByStatus, getLeadsByCreator,
-    run
+    run, insertProject, getProjectByLeadId
 } from '../db.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
 
@@ -243,6 +243,70 @@ router.put('/:id/approve', authenticateToken, authorize('TechLead', 'Admin'), (r
     } catch (error) {
         console.error('Approve lead error:', error);
         res.status(500).json({ error: 'Failed to approve lead' });
+    }
+});
+
+// PUT /api/leads/:id/reject - Sale rejects lead
+router.put('/:id/reject', authenticateToken, authorize('Sale', 'Admin'), (req, res) => {
+    try {
+        const lead = queryOne('SELECT * FROM leads WHERE id = ?', [req.params.id]);
+        if (!lead) {
+            return res.status(404).json({ error: 'Lead not found' });
+        }
+
+        // Can only reject Estimated leads
+        if (lead.status !== 'Estimated') {
+            return res.status(400).json({ error: 'Can only reject leads with Estimated status' });
+        }
+
+        const { reason } = req.body;
+        if (!reason) {
+            return res.status(400).json({ error: 'Rejection reason is required' });
+        }
+
+        const updated = updateLead(req.params.id, {
+            status: 'Rejected',
+            rejection_reason: reason
+        });
+
+        res.json(updated);
+    } catch (error) {
+        console.error('Reject lead error:', error);
+        res.status(500).json({ error: 'Failed to reject lead' });
+    }
+});
+
+// PUT /api/leads/:id/contract - Sale converts lead to contract (creates project)
+router.put('/:id/contract', authenticateToken, authorize('Sale', 'Admin'), (req, res) => {
+    try {
+        const lead = queryOne('SELECT * FROM leads WHERE id = ?', [req.params.id]);
+        if (!lead) {
+            return res.status(404).json({ error: 'Lead not found' });
+        }
+
+        // Can only convert Estimated leads
+        if (lead.status !== 'Estimated') {
+            return res.status(400).json({ error: 'Can only convert leads with Estimated status' });
+        }
+
+        // Check if project already exists
+        const existingProject = getProjectByLeadId(lead.id);
+        if (existingProject) {
+            return res.status(400).json({ error: 'Project already exists for this lead' });
+        }
+
+        // Update lead status
+        const updatedLead = updateLead(req.params.id, {
+            status: 'Contract'
+        });
+
+        // Create new project
+        const project = insertProject(lead.id);
+
+        res.json({ lead: updatedLead, project });
+    } catch (error) {
+        console.error('Convert to contract error:', error);
+        res.status(500).json({ error: 'Failed to convert lead to contract' });
     }
 });
 

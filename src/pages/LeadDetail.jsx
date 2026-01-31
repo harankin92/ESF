@@ -22,7 +22,10 @@ import {
     Save,
     X,
     Plus,
-    Send
+    Send,
+    XCircle,
+    FileSignature,
+    AlertTriangle
 } from 'lucide-react';
 
 const LeadDetail = ({ leadId, onBack, onOpenEstimate, onCreateEstimate, onEdit, onDelete }) => {
@@ -38,6 +41,8 @@ const LeadDetail = ({ leadId, onBack, onOpenEstimate, onCreateEstimate, onEdit, 
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [editedName, setEditedName] = useState('');
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [rejectionReason, setRejectionReason] = useState('');
 
     const canEditLead = (lead) => {
         if (!user) return false;
@@ -145,6 +150,37 @@ const LeadDetail = ({ leadId, onBack, onOpenEstimate, onCreateEstimate, onEdit, 
         try {
             setSaving(true);
             await api.updateLead(leadId, { status: 'Pending Review' });
+            await loadLead();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleReject = async () => {
+        if (!rejectionReason.trim()) {
+            setError('Rejection reason is required');
+            return;
+        }
+        try {
+            setSaving(true);
+            await api.rejectLead(leadId, rejectionReason);
+            await loadLead();
+            setShowRejectModal(false);
+            setRejectionReason('');
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleConvertToContract = async () => {
+        if (!confirm('Convert this lead to a contract? This will create a new project.')) return;
+        try {
+            setSaving(true);
+            await api.convertToContract(leadId);
             await loadLead();
         } catch (err) {
             setError(err.message);
@@ -337,6 +373,28 @@ const LeadDetail = ({ leadId, onBack, onOpenEstimate, onCreateEstimate, onEdit, 
                                 View Estimate
                             </button>
                         )}
+
+                        {/* Sale: Reject/Contract for Estimated leads */}
+                        {canEditLead(lead) && lead.status === 'Estimated' && (
+                            <>
+                                <button
+                                    onClick={() => setShowRejectModal(true)}
+                                    disabled={saving}
+                                    className="flex items-center gap-2 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl font-bold text-sm transition-all"
+                                >
+                                    <XCircle size={16} />
+                                    Reject
+                                </button>
+                                <button
+                                    onClick={handleConvertToContract}
+                                    disabled={saving}
+                                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
+                                >
+                                    <FileSignature size={16} />
+                                    Convert to Contract
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </header>
@@ -439,6 +497,51 @@ const LeadDetail = ({ leadId, onBack, onOpenEstimate, onCreateEstimate, onEdit, 
                     </div>
                 )}
 
+                {/* Reject Modal */}
+                {showRejectModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md">
+                            <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+                                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                    <AlertTriangle className="text-red-500" size={20} />
+                                    Reject Lead
+                                </h2>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                    Please provide a reason for rejecting this lead
+                                </p>
+                            </div>
+                            <div className="p-6">
+                                <textarea
+                                    value={rejectionReason}
+                                    onChange={(e) => setRejectionReason(e.target.value)}
+                                    placeholder="Enter rejection reason..."
+                                    rows={4}
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                                />
+                                <div className="mt-6 flex justify-end gap-3">
+                                    <button
+                                        onClick={() => {
+                                            setShowRejectModal(false);
+                                            setRejectionReason('');
+                                        }}
+                                        className="px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-400"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleReject}
+                                        disabled={saving || !rejectionReason.trim()}
+                                        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-4 py-2 rounded-xl font-bold text-sm"
+                                    >
+                                        <XCircle size={16} />
+                                        {saving ? 'Rejecting...' : 'Reject Lead'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Meta Info */}
                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6">
                     <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
@@ -453,6 +556,32 @@ const LeadDetail = ({ leadId, onBack, onOpenEstimate, onCreateEstimate, onEdit, 
                         </div>
                     </div>
                 </div>
+
+                {/* Rejection Reason */}
+                {lead.status === 'Rejected' && lead.rejection_reason && (
+                    <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800 p-6">
+                        <h3 className="text-sm font-black text-red-800 dark:text-red-300 uppercase tracking-wide mb-3 flex items-center gap-2">
+                            <AlertTriangle size={16} />
+                            Rejection Reason
+                        </h3>
+                        <div className="text-sm text-red-900 dark:text-red-100 whitespace-pre-wrap">
+                            {lead.rejection_reason}
+                        </div>
+                    </div>
+                )}
+
+                {/* Contract Status - Show link to project */}
+                {lead.status === 'Contract' && (
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800 p-6">
+                        <h3 className="text-sm font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wide mb-3 flex items-center gap-2">
+                            <FileSignature size={16} />
+                            Contract Status
+                        </h3>
+                        <div className="text-sm text-emerald-900 dark:text-emerald-100">
+                            This lead has been converted to a contract. A project has been created for the PM.
+                        </div>
+                    </div>
+                )}
 
                 {/* Project Overview */}
                 {lead.project_overview && (

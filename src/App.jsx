@@ -8,12 +8,14 @@ import Estimator from './pages/EstimatorOld';
 import SharedReport from './pages/SharedReport';
 import LeadForm from './pages/LeadForm';
 import LeadDetail from './pages/LeadDetail';
+import ProjectDetail from './pages/ProjectDetail';
 
 const AppContent = () => {
     const { user, loading } = useAuth();
-    const [view, setView] = useState('dashboard'); // 'dashboard' | 'estimator' | 'lead-form' | 'lead-detail'
+    const [view, setView] = useState('dashboard'); // 'dashboard' | 'estimator' | 'lead-form' | 'lead-detail' | 'project-detail'
     const [currentEstimateId, setCurrentEstimateId] = useState(null);
     const [currentLeadId, setCurrentLeadId] = useState(null);
+    const [currentProjectId, setCurrentProjectId] = useState(null);
     const [leadToEdit, setLeadToEdit] = useState(null);
     const [sourceLeadId, setSourceLeadId] = useState(null);
 
@@ -45,6 +47,7 @@ const AppContent = () => {
         setView('dashboard');
         setCurrentEstimateId(null);
         setCurrentLeadId(null);
+        setCurrentProjectId(null);
         setLeadToEdit(null);
     };
 
@@ -73,6 +76,11 @@ const AppContent = () => {
         }
     };
 
+    const handleOpenProject = (id) => {
+        setCurrentProjectId(id);
+        setView('project-detail');
+    };
+
     // Lead Form
     if (view === 'lead-form') {
         return (
@@ -98,6 +106,17 @@ const AppContent = () => {
         );
     }
 
+    // Project Detail
+    if (view === 'project-detail') {
+        return (
+            <ProjectDetail
+                projectId={currentProjectId}
+                onBack={handleBack}
+                onOpenEstimate={handleOpenEstimate}
+            />
+        );
+    }
+
     // Estimator
     if (view === 'estimator') {
         return (
@@ -118,6 +137,7 @@ const AppContent = () => {
             onCreateNew={handleCreateNew}
             onOpenLead={handleOpenLead}
             onCreateLead={handleCreateLead}
+            onOpenProject={handleOpenProject}
         />
     );
 };

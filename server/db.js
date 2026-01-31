@@ -186,6 +186,88 @@ export const initDb = async () => {
     db.run("ROLLBACK");
   }
 
+  // Migration: Add Rejected and Contract statuses to leads
+  try {
+    const leadsSchema = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='leads'")[0]?.values[0][0];
+    if (leadsSchema && !leadsSchema.includes("'Rejected'")) {
+      console.log('Migrating leads table to support Rejected/Contract statuses...');
+      db.run("BEGIN TRANSACTION");
+      db.run("ALTER TABLE leads RENAME TO leads_old2");
+      db.run(`
+        CREATE TABLE leads (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          created_by INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Pending Review', 'Reviewing', 'Pending Estimation', 'Estimated', 'Rejected', 'Contract')),
+          client_name TEXT NOT NULL,
+          cooperation_model TEXT,
+          work_type TEXT,
+          tech_stack TEXT,
+          hourly_rate REAL,
+          budget TEXT,
+          timeframe TEXT,
+          deadline TEXT,
+          start_date TEXT,
+          team_need TEXT,
+          english_level TEXT,
+          meetings TEXT,
+          timezone TEXT,
+          project_stage TEXT,
+          intro_call_link TEXT,
+          presentation_link TEXT,
+          business_idea TEXT,
+          job_description TEXT,
+          design_link TEXT,
+          project_overview TEXT,
+          rejection_reason TEXT,
+          estimate_id INTEGER,
+          assigned_presale INTEGER,
+          assigned_techlead INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (created_by) REFERENCES users(id),
+          FOREIGN KEY (estimate_id) REFERENCES estimates(id),
+          FOREIGN KEY (assigned_presale) REFERENCES users(id),
+          FOREIGN KEY (assigned_techlead) REFERENCES users(id)
+        )
+      `);
+      db.run(`INSERT INTO leads (id, created_by, status, client_name, cooperation_model, work_type, tech_stack, 
+        hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings, timezone,
+        project_stage, intro_call_link, presentation_link, business_idea, job_description, design_link,
+        project_overview, estimate_id, assigned_presale, assigned_techlead, created_at, updated_at)
+        SELECT id, created_by, status, client_name, cooperation_model, work_type, tech_stack,
+        hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings, timezone,
+        project_stage, intro_call_link, presentation_link, business_idea, job_description, design_link,
+        project_overview, estimate_id, assigned_presale, assigned_techlead, created_at, updated_at FROM leads_old2`);
+      db.run("DROP TABLE leads_old2");
+      db.run("COMMIT");
+      saveDb();
+      console.log('✓ Migrated leads table with Rejected/Contract statuses');
+    }
+  } catch (err) {
+    console.error('Leads Rejected/Contract migration failed:', err);
+    db.run("ROLLBACK");
+  }
+
+  // Projects table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Active', 'Paused', 'Finished')),
+      assigned_pm INTEGER,
+      assigned_developers TEXT,
+      credentials TEXT,
+      project_charter TEXT,
+      documentation TEXT,
+      changelog TEXT,
+      invoices TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (lead_id) REFERENCES leads(id),
+      FOREIGN KEY (assigned_pm) REFERENCES users(id)
+    )
+  `);
+
   return db;
 };
 
@@ -322,4 +404,76 @@ export const getLeadsByCreator = (userId) => {
     WHERE leads.created_by = ?
     ORDER BY leads.created_at DESC
   `, [userId]);
+};
+
+// Project helpers
+export const insertProject = (leadId) => {
+  db.run(
+    'INSERT INTO projects (lead_id, changelog) VALUES (?, ?)',
+    [leadId, JSON.stringify([{ date: new Date().toISOString(), action: 'Project created from lead', user: 'System' }])]
+  );
+  saveDb();
+  return queryOne('SELECT * FROM projects WHERE lead_id = ?', [leadId]);
+};
+
+export const updateProject = (id, updates) => {
+  const fields = Object.keys(updates);
+  const values = Object.values(updates);
+  const setClause = fields.map(f => `${f} = ?`).join(', ');
+
+  db.run(`UPDATE projects SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...values, id]);
+  saveDb();
+
+  return queryOne('SELECT * FROM projects WHERE id = ?', [id]);
+};
+
+export const getProjectWithDetails = (id) => {
+  const project = queryOne(`
+    SELECT projects.*, 
+           pm.name as pm_name,
+           leads.client_name, leads.cooperation_model, leads.work_type, leads.tech_stack,
+           leads.hourly_rate, leads.budget, leads.timeframe, leads.deadline, leads.start_date,
+           leads.team_need, leads.english_level, leads.meetings, leads.timezone, leads.project_stage,
+           leads.intro_call_link, leads.presentation_link, leads.business_idea, leads.job_description,
+           leads.design_link, leads.project_overview, leads.estimate_id,
+           sale.name as sale_name,
+           presale.name as presale_name
+    FROM projects
+    LEFT JOIN users pm ON projects.assigned_pm = pm.id
+    LEFT JOIN leads ON projects.lead_id = leads.id
+    LEFT JOIN users sale ON leads.created_by = sale.id
+    LEFT JOIN users presale ON leads.assigned_presale = presale.id
+    WHERE projects.id = ?
+  `, [id]);
+
+  if (project && project.estimate_id) {
+    project.estimate = queryOne('SELECT * FROM estimates WHERE id = ?', [project.estimate_id]);
+  }
+
+  return project;
+};
+
+export const getAllProjects = () => {
+  return queryAll(`
+    SELECT projects.*, leads.client_name, pm.name as pm_name
+    FROM projects
+    LEFT JOIN leads ON projects.lead_id = leads.id
+    LEFT JOIN users pm ON projects.assigned_pm = pm.id
+    ORDER BY projects.created_at DESC
+  `);
+};
+
+export const getProjectsByPM = (pmId) => {
+  return queryAll(`
+    SELECT projects.*, leads.client_name, pm.name as pm_name
+    FROM projects
+    LEFT JOIN leads ON projects.lead_id = leads.id
+    LEFT JOIN users pm ON projects.assigned_pm = pm.id
+    WHERE projects.assigned_pm = ?
+    ORDER BY projects.created_at DESC
+  `, [pmId]);
+};
+
+export const getProjectByLeadId = (leadId) => {
+  return queryOne('SELECT * FROM projects WHERE lead_id = ?', [leadId]);
 };

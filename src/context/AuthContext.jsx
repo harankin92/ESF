@@ -85,7 +85,6 @@ export const AuthProvider = ({ children }) => {
             canReviewLead,
             canApproveLead,
             canViewLeads,
-            canViewLeads,
             canViewEstimates,
             canEditLead // Exports the new permission
         }}>

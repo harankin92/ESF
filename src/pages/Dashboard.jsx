@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { calculateTotals } from '../hooks/useTotals';
 import { DEFAULT_MANUAL_ROLES, DEFAULT_SECTIONS } from '../constants/defaults';
 import LeadCard from '../components/leads/LeadCard';
+import ProjectCard from '../components/projects/ProjectCard';
 import {
     Plus,
     Layers,
@@ -17,13 +18,15 @@ import {
     AlertCircle,
     Users,
     FileText,
-    Briefcase
+    Briefcase,
+    FolderKanban
 } from 'lucide-react';
 
-const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead }) => {
+const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOpenProject }) => {
     const { user, logout, canCreate, canEdit, canDelete, canCreateLead, canViewLeads, canViewEstimates } = useAuth();
     const [estimates, setEstimates] = useState([]);
     const [leads, setLeads] = useState([]);
+    const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -32,6 +35,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead }) =>
         if (user?.role === 'Sale') return 'leads';
         if (user?.role === 'TechLead') return 'pending';
         if (user?.role === 'PreSale') return 'pending-review';
+        if (user?.role === 'PM') return 'projects';
         return 'estimates';
     };
 
@@ -54,6 +58,12 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead }) =>
             // Load leads
             const leadsData = await api.getLeads();
             setLeads(leadsData);
+
+            // Load projects for PM/Admin
+            if (user?.role === 'PM' || user?.role === 'Admin') {
+                const projectsData = await api.getProjects();
+                setProjects(projectsData);
+            }
         } catch (err) {
             setError('Failed to load data');
         } finally {
@@ -108,6 +118,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead }) =>
             tabs.push({ id: 'pending', label: 'Pending Estimation', icon: Clock, count: pendingLeads.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'PM') {
+            tabs.push({ id: 'projects', label: 'Projects', icon: FolderKanban, count: projects.length });
             tabs.push({ id: 'leads', label: 'All Leads', icon: Briefcase, count: leads.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
         }
@@ -205,7 +216,9 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead }) =>
                     <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">
                         {activeTab === 'leads' && (user?.role === 'Sale' ? 'My Leads' : 'All Leads')}
                         {activeTab === 'pending' && 'Pending Estimation'}
+                        {activeTab === 'pending-review' && 'Pending Review'}
                         {activeTab === 'estimates' && 'Project Estimates'}
+                        {activeTab === 'projects' && 'Projects'}
                     </h2>
                     <div className="flex gap-2">
                         {activeTab === 'leads' && canCreateLead() && (
@@ -427,6 +440,31 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead }) =>
                                                 </div>
                                             );
                                         })}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Projects Tab */}
+                        {activeTab === 'projects' && (
+                            <>
+                                {projects.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <FolderKanban size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No projects yet</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            Projects will appear here when leads are converted to contracts.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {projects.map(project => (
+                                            <ProjectCard
+                                                key={project.id}
+                                                project={project}
+                                                onClick={onOpenProject}
+                                            />
+                                        ))}
                                     </div>
                                 )}
                             </>

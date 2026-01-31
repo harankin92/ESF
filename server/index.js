@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import estimatesRoutes from './routes/estimates.js';
 import publicRoutes from './routes/public.js';
 import leadsRoutes from './routes/leads.js';
+import projectsRoutes from './routes/projects.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +22,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/estimates', estimatesRoutes);
 app.use('/api/shared', publicRoutes);
 app.use('/api/leads', leadsRoutes);
+app.use('/api/projects', projectsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -52,7 +54,19 @@ initDb().then(() => {
   - PUT  /api/leads/:id/overview - Add project overview (PreSale)
   - PUT  /api/leads/:id/review   - Start reviewing (PreSale)
   - PUT  /api/leads/:id/approve  - Approve with estimate (TechLead)
+  - PUT  /api/leads/:id/reject   - Reject lead (Sale)
+  - PUT  /api/leads/:id/contract - Convert to contract (Sale)
   - DELETE /api/leads/:id    - Delete lead
+  
+  Project Endpoints:
+  - GET  /api/projects       - List projects
+  - GET  /api/projects/:id   - Get project details
+  - PUT  /api/projects/:id   - Update project
+  - PUT  /api/projects/:id/status - Change status
+  - PUT  /api/projects/:id/credentials - Update credentials
+  - PUT  /api/projects/:id/documentation - Update docs
+  - PUT  /api/projects/:id/changelog - Add changelog entry
+  - PUT  /api/projects/:id/invoices - Update invoices
   
   Test Users:
   - admin@test.com / admin123 (Admin)
