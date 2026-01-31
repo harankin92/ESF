@@ -58,6 +58,20 @@ export const AuthProvider = ({ children }) => {
     };
     const canDelete = (createdBy) => canEdit(createdBy);
 
+    // Lead permissions
+    const canCreateLead = () => user && (user.role === 'Sale' || user.role === 'Admin');
+    const canReviewLead = () => user && (user.role === 'PreSale' || user.role === 'Admin');
+    const canApproveLead = () => user && (user.role === 'TechLead' || user.role === 'Admin');
+    const canViewLeads = () => user && user.role !== 'TechLead'; // TechLead only sees pending
+    const canViewEstimates = () => user && user.role !== 'Sale'; // Sale doesn't see estimates
+
+    const canEditLead = (lead) => {
+        if (!user) return false;
+        if (user.role === 'Admin') return true;
+        if (user.role === 'Sale' && lead.created_by === user.id) return true;
+        return false;
+    };
+
     return (
         <AuthContext.Provider value={{
             user,
@@ -66,7 +80,14 @@ export const AuthProvider = ({ children }) => {
             logout,
             canCreate,
             canEdit,
-            canDelete
+            canDelete,
+            canCreateLead,
+            canReviewLead,
+            canApproveLead,
+            canViewLeads,
+            canViewLeads,
+            canViewEstimates,
+            canEditLead // Exports the new permission
         }}>
             {children}
         </AuthContext.Provider>

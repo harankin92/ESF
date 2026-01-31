@@ -4,6 +4,7 @@ import { initDb } from './db.js';
 import authRoutes from './routes/auth.js';
 import estimatesRoutes from './routes/estimates.js';
 import publicRoutes from './routes/public.js';
+import leadsRoutes from './routes/leads.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/estimates', estimatesRoutes);
 app.use('/api/shared', publicRoutes);
+app.use('/api/leads', leadsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -42,11 +44,22 @@ initDb().then(() => {
   - POST /api/estimates/:id/share - Generate share link
   - GET  /api/shared/:uuid   - Get shared estimate (Public)
   
+  Lead Endpoints:
+  - GET  /api/leads          - List leads
+  - POST /api/leads          - Create lead (Sale)
+  - GET  /api/leads/:id      - Get lead
+  - PUT  /api/leads/:id      - Update lead
+  - PUT  /api/leads/:id/overview - Add project overview (PreSale)
+  - PUT  /api/leads/:id/review   - Start reviewing (PreSale)
+  - PUT  /api/leads/:id/approve  - Approve with estimate (TechLead)
+  - DELETE /api/leads/:id    - Delete lead
+  
   Test Users:
   - admin@test.com / admin123 (Admin)
   - presale@test.com / presale123 (PreSale)
   - techlead@test.com / techlead123 (TechLead)
   - pm@test.com / pm123 (PM)
+  - sale@test.com / sale123 (Sale)
     `);
     });
 }).catch(err => {

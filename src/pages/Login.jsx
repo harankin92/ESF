@@ -97,6 +97,7 @@ const Login = () => {
                         <div className="grid grid-cols-2 gap-2 text-[10px]">
                             {[
                                 { email: 'admin@test.com', role: 'Admin' },
+                                { email: 'sale@test.com', role: 'Sale' },
                                 { email: 'presale@test.com', role: 'PreSale' },
                                 { email: 'techlead@test.com', role: 'TechLead' },
                                 { email: 'pm@test.com', role: 'PM' }

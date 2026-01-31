@@ -100,5 +100,106 @@ export const api = {
         const res = await fetch(`${API_URL}/shared/${uuid}`);
         if (!res.ok) throw new Error('Failed to load shared estimate');
         return res.json();
+    },
+
+    // Leads
+    async getLeads() {
+        const res = await fetch(`${API_URL}/leads`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch leads');
+        return res.json();
+    },
+
+    async getPendingLeads() {
+        const res = await fetch(`${API_URL}/leads/pending`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch pending leads');
+        return res.json();
+    },
+
+    async getLead(id) {
+        const res = await fetch(`${API_URL}/leads/${id}`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch lead');
+        return res.json();
+    },
+
+    async createLead(data) {
+        const res = await fetch(`${API_URL}/leads`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to create lead');
+        }
+        return res.json();
+    },
+
+    async updateLead(id, data) {
+        const res = await fetch(`${API_URL}/leads/${id}`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update lead');
+        }
+        return res.json();
+    },
+
+    async addProjectOverview(id, project_overview) {
+        const res = await fetch(`${API_URL}/leads/${id}/overview`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ project_overview })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to add overview');
+        }
+        return res.json();
+    },
+
+    async startReviewLead(id) {
+        const res = await fetch(`${API_URL}/leads/${id}/review`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to start review');
+        }
+        return res.json();
+    },
+
+    async approveLead(id, estimate_id) {
+        const res = await fetch(`${API_URL}/leads/${id}/approve`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ estimate_id })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to approve lead');
+        }
+        return res.json();
+    },
+
+    async deleteLead(id) {
+        const res = await fetch(`${API_URL}/leads/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to delete lead');
+        }
+        return res.json();
     }
 };

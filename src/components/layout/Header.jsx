@@ -1,4 +1,4 @@
-import { Layers, Settings, Download, Clock, Database, MessageSquare, Save, ArrowLeft, Check } from 'lucide-react';
+import { Layers, Settings, Download, Clock, Database, MessageSquare, Save, ArrowLeft, Check, FileText, CheckCircle } from 'lucide-react';
 import ThemeToggle from '../common/ThemeToggle';
 
 const Header = ({
@@ -10,6 +10,7 @@ const Header = ({
     setActiveTab,
     onPrintReport,
     onSave,
+    onApprove,
     onBack,
     saving,
     saveMessage,
@@ -19,7 +20,8 @@ const Header = ({
     const tabs = [
         { id: 'estimation', label: 'Estimation', icon: <Clock size={16} /> },
         { id: 'tech-stack', label: 'Tech Stack', icon: <Database size={16} /> },
-        { id: 'questions', label: 'Questions', icon: <MessageSquare size={16} /> }
+        { id: 'questions', label: 'Questions', icon: <MessageSquare size={16} /> },
+        { id: 'overview', label: 'Lead Overview', icon: <FileText size={16} /> }
     ];
 
     return (
@@ -88,6 +90,16 @@ const Header = ({
                                     <span className="font-semibold">Save</span>
                                 </>
                             )}
+                        </button>
+                    )}
+
+                    {onApprove && (
+                        <button
+                            onClick={onApprove}
+                            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-emerald-100 dark:shadow-none transition-all"
+                        >
+                            <CheckCircle size={18} />
+                            <span className="font-semibold">Approve</span>
                         </button>
                     )}
 

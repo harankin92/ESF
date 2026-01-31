@@ -9,8 +9,9 @@ import StatsGrid from '../components/stats/StatsGrid';
 import SettingsTab from '../components/settings/SettingsTab';
 import PrintPreview from '../components/print/PrintPreview';
 import EstimationTab from '../components/estimation/EstimationTab';
+import LeadOverviewTab from '../components/tabs/LeadOverviewTab';
 
-const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = null }) => {
+const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = null, sourceLeadId = null }) => {
     // State
     const [projectName, setProjectName] = useState('New Project Estimate');
     const [clientName, setClientName] = useState('');
@@ -30,11 +31,32 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
     const [saveMessage, setSaveMessage] = useState('');
 
     const [currentEstimateId, setCurrentEstimateId] = useState(estimateId);
+    const [lead, setLead] = useState(null);
 
     // Sync state if prop changes
     useEffect(() => {
         setCurrentEstimateId(estimateId);
     }, [estimateId]);
+
+    // Fetch associated lead
+    useEffect(() => {
+        const fetchLead = async () => {
+            try {
+                if (sourceLeadId) {
+                    const data = await api.getLead(sourceLeadId);
+                    setLead(data);
+                } else if (estimateId) {
+                    // Try to find lead associated with this estimate
+                    const leads = await api.getLeads();
+                    const found = leads.find(l => l.estimate_id === Number(estimateId));
+                    if (found) setLead(found);
+                }
+            } catch (err) {
+                console.error('Failed to fetch lead:', err);
+            }
+        };
+        fetchLead();
+    }, [sourceLeadId, estimateId]);
 
     // Load initial data if provided (edit mode)
     useEffect(() => {
@@ -226,12 +248,14 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 clientName
             };
 
+            let savedId = currentEstimateId;
             if (currentEstimateId) {
                 await api.updateEstimate(currentEstimateId, projectName, estimateData);
             } else {
                 const newEstimate = await api.createEstimate(projectName, estimateData);
                 if (newEstimate && newEstimate.id) {
                     setCurrentEstimateId(newEstimate.id);
+                    savedId = newEstimate.id;
                 }
             }
 
@@ -241,11 +265,30 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
             // Invoke onSaved callback if provided (e.g. to refresh dashboard)
             if (onSaved) onSaved();
 
+            return savedId;
+
         } catch (error) {
             console.error('Failed to save estimate:', error);
             alert('Failed to save estimate: ' + (error.message || error));
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleApprove = async () => {
+        if (!lead) return;
+        if (!confirm('Approve this estimation? Current lead status will be updated to "Estimated".')) return;
+
+        try {
+            const id = await handleSave();
+            if (id) {
+                await api.approveLead(lead.id, id);
+                alert('Estimation approved & lead updated!');
+                setLead(prev => ({ ...prev, status: 'Estimated', estimate_id: id }));
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Approval failed: ' + e.message);
         }
     };
 
@@ -264,6 +307,7 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 setActiveTab={setActiveTab}
                 onPrintReport={handlePrint}
                 onSave={handleSave}
+                onApprove={(user?.role === 'TechLead' && lead) ? handleApprove : undefined}
                 onBack={onBack}
                 saving={saving}
                 saveMessage={saveMessage}
@@ -332,6 +376,12 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                             discount={discount}
                             setDiscount={setDiscount}
                         />
+                    </div>
+                )}
+
+                {activeTab === 'overview' && (
+                    <div className="animate-slide-up">
+                        <LeadOverviewTab lead={lead} />
                     </div>
                 )}
             </main>
