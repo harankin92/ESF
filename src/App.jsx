@@ -18,6 +18,7 @@ const AppContent = () => {
     const [currentProjectId, setCurrentProjectId] = useState(null);
     const [leadToEdit, setLeadToEdit] = useState(null);
     const [sourceLeadId, setSourceLeadId] = useState(null);
+    const [estimateContext, setEstimateContext] = useState(null);
 
     if (loading) {
         return (
@@ -34,12 +35,28 @@ const AppContent = () => {
     const handleOpenEstimate = (id) => {
         setCurrentEstimateId(id);
         setSourceLeadId(null);
+        setEstimateContext(null);
         setView('estimator');
     };
 
-    const handleCreateNew = (leadId = null) => {
+    const handleCreateNew = (arg = null) => {
         setCurrentEstimateId(null);
-        setSourceLeadId(typeof leadId === 'object' ? null : leadId);
+
+        // Handle argument types: context object vs lead ID vs event/null
+        if (arg && typeof arg === 'object' && !arg.nativeEvent) {
+            // It's a context object { requestId, projectId, leadId }
+            setEstimateContext(arg);
+            setSourceLeadId(arg.leadId || null);
+        } else if (['string', 'number'].includes(typeof arg)) {
+            // It's a lead ID (primitive)
+            setSourceLeadId(arg);
+            setEstimateContext({ leadId: arg });
+        } else {
+            // Event or null
+            setSourceLeadId(null);
+            setEstimateContext(null);
+        }
+
         setView('estimator');
     };
 
@@ -49,6 +66,7 @@ const AppContent = () => {
         setCurrentLeadId(null);
         setCurrentProjectId(null);
         setLeadToEdit(null);
+        setEstimateContext(null);
     };
 
     const handleOpenLead = (id) => {
@@ -124,6 +142,7 @@ const AppContent = () => {
                 user={user}
                 estimateId={currentEstimateId}
                 sourceLeadId={sourceLeadId}
+                context={estimateContext}
                 onBack={handleBack}
                 onSaved={() => { }}
             />

@@ -27,7 +27,9 @@ import {
     Trash2,
     Link as LinkIcon,
     GitBranch,
-    Server
+    Server,
+    Layers,
+    MessageSquare
 } from 'lucide-react';
 
 const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
@@ -53,6 +55,12 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
     const [invoices, setInvoices] = useState([]);
     const [newInvoice, setNewInvoice] = useState({ number: '', amount: '', date: '', status: 'pending' });
 
+    // Estimates & Requests state
+    const [projectEstimates, setProjectEstimates] = useState([]);
+    const [estimateRequests, setEstimateRequests] = useState([]);
+    const [showRequestModal, setShowRequestModal] = useState(false);
+    const [requestScope, setRequestScope] = useState('');
+
     const canEditProject = () => {
         if (!user) return false;
         return user.role === 'PM' || user.role === 'Admin';
@@ -60,7 +68,10 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
 
     useEffect(() => {
         loadProject();
-    }, [projectId]);
+        if (activeTab === 'estimates') {
+            loadEstimatesAndRequests();
+        }
+    }, [projectId, activeTab]);
 
     const loadProject = async () => {
         try {
@@ -179,8 +190,37 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
         setNewInvoice({ number: '', amount: '', date: '', status: 'pending' });
     };
 
+    const loadEstimatesAndRequests = async () => {
+        try {
+            const [ests, reqs] = await Promise.all([
+                api.getProjectEstimates(projectId),
+                api.getProjectEstimateRequests(projectId)
+            ]);
+            setProjectEstimates(ests);
+            setEstimateRequests(reqs);
+        } catch (err) {
+            console.error('Failed to load estimates data:', err);
+        }
+    };
+
+    const handleCreateRequest = async () => {
+        if (!requestScope.trim()) return;
+        try {
+            setSaving(true);
+            await api.createEstimateRequest(projectId, requestScope);
+            await loadEstimatesAndRequests();
+            setShowRequestModal(false);
+            setRequestScope('');
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const tabs = [
         { id: 'overview', label: 'Overview', icon: FileText },
+        { id: 'estimates', label: 'Estimates', icon: Layers },
         { id: 'credentials', label: 'Credentials', icon: Key },
         { id: 'documentation', label: 'Documentation', icon: FileText },
         { id: 'changelog', label: 'Changelog', icon: History },
@@ -285,8 +325,8 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center gap-2 px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-all ${activeTab === tab.id
-                                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                                     }`}
                             >
                                 <tab.icon size={16} />
@@ -353,6 +393,142 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
                                 </button>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* Estimates Tab */}
+                {activeTab === 'estimates' && (
+                    <div className="space-y-8">
+                        {/* Request Modal */}
+                        {showRequestModal && (
+                            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg">
+                                    <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                                            Request Estimate
+                                        </h2>
+                                        <button
+                                            onClick={() => setShowRequestModal(false)}
+                                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                                        >
+                                            <X size={20} className="text-slate-400" />
+                                        </button>
+                                    </div>
+                                    <div className="p-6">
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                                            Scope / Requirements
+                                        </label>
+                                        <textarea
+                                            value={requestScope}
+                                            onChange={(e) => setRequestScope(e.target.value)}
+                                            placeholder="Describe what needs to be estimated..."
+                                            rows={5}
+                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-sm text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                                        />
+                                        <div className="mt-6 flex justify-end gap-3">
+                                            <button
+                                                onClick={() => setShowRequestModal(false)}
+                                                className="px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-400"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleCreateRequest}
+                                                disabled={saving || !requestScope.trim()}
+                                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50"
+                                            >
+                                                {saving ? 'Sending...' : 'Send Request'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Requests Section */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
+                                    <MessageSquare size={16} />
+                                    Estimate Requests
+                                </h3>
+                                {canEditProject() && (
+                                    <button
+                                        onClick={() => setShowRequestModal(true)}
+                                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-xs"
+                                    >
+                                        <Plus size={14} />
+                                        Request Estimate
+                                    </button>
+                                )}
+                            </div>
+
+                            {estimateRequests.length === 0 ? (
+                                <div className="text-center py-8 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 border-dashed">
+                                    <div className="text-sm text-slate-400 dark:text-slate-500">No active requests</div>
+                                </div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {estimateRequests.map(req => (
+                                        <div key={req.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <StatusBadge status={req.status} size="xs" />
+                                                    <span className="text-xs text-slate-400">
+                                                        Requested by {req.requester_name} • {new Date(req.created_at).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                                                    {req.scope_description}
+                                                </p>
+                                                {req.estimate_id && (
+                                                    <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+                                                        <CheckCircle size={12} />
+                                                        Completed with Estimate #{req.estimate_id}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Completed Estimates Section */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wide flex items-center gap-2">
+                                <Layers size={16} />
+                                Completed Estimates
+                            </h3>
+
+                            {projectEstimates.length === 0 ? (
+                                <div className="text-center py-8 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 border-dashed">
+                                    <div className="text-sm text-slate-400 dark:text-slate-500">No linked estimates</div>
+                                </div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {projectEstimates.map(est => (
+                                        <div key={est.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between group hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                                            <div>
+                                                <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-1">
+                                                    {est.name}
+                                                </h4>
+                                                <div className="text-xs text-slate-400">
+                                                    Created by {est.creator_name} • {new Date(est.created_at).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => onOpenEstimate?.(est.id)}
+                                                className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-bold text-sm"
+                                            >
+                                                View
+                                                <ExternalLink size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 

@@ -11,7 +11,7 @@ import PrintPreview from '../components/print/PrintPreview';
 import EstimationTab from '../components/estimation/EstimationTab';
 import LeadOverviewTab from '../components/tabs/LeadOverviewTab';
 
-const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = null, sourceLeadId = null }) => {
+const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = null, sourceLeadId = null, context = null }) => {
     // State
     const [projectName, setProjectName] = useState('New Project Estimate');
     const [clientName, setClientName] = useState('');
@@ -252,7 +252,9 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
             if (currentEstimateId) {
                 await api.updateEstimate(currentEstimateId, projectName, estimateData);
             } else {
-                const newEstimate = await api.createEstimate(projectName, estimateData);
+                // Pass project_id from context if available
+                const projectId = context?.projectId || null;
+                const newEstimate = await api.createEstimate(projectName, estimateData, projectId);
                 if (newEstimate && newEstimate.id) {
                     setCurrentEstimateId(newEstimate.id);
                     savedId = newEstimate.id;
@@ -276,15 +278,32 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
     };
 
     const handleApprove = async () => {
-        if (!lead) return;
-        if (!confirm('Approve this estimation? Current lead status will be updated to "Estimated".')) return;
+        // Support both lead-based approval and request-based approval
+        const canApproveLead = !!lead;
+        const canApproveRequest = !!(context?.requestId);
+
+        if (!canApproveLead && !canApproveRequest) return;
+
+        const confirmMsg = canApproveLead
+            ? 'Approve this estimation? Current lead status will be updated to "Estimated".'
+            : 'Complete this estimate request?';
+        if (!confirm(confirmMsg)) return;
 
         try {
             const id = await handleSave();
             if (id) {
-                await api.approveLead(lead.id, id);
-                alert('Estimation approved & lead updated!');
-                setLead(prev => ({ ...prev, status: 'Estimated', estimate_id: id }));
+                // If we have a lead, approve it
+                if (canApproveLead) {
+                    await api.approveLead(lead.id, id);
+                    setLead(prev => ({ ...prev, status: 'Estimated', estimate_id: id }));
+                }
+
+                // If we have a request context, complete the request
+                if (canApproveRequest) {
+                    await api.completeEstimateRequest(context.requestId, id);
+                }
+
+                alert(canApproveLead ? 'Estimation approved & lead updated!' : 'Estimate request completed!');
             }
         } catch (e) {
             console.error(e);
@@ -307,7 +326,7 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 setActiveTab={setActiveTab}
                 onPrintReport={handlePrint}
                 onSave={handleSave}
-                onApprove={(user?.role === 'TechLead' && lead) ? handleApprove : undefined}
+                onApprove={(user?.role === 'TechLead' && (lead || context?.requestId)) ? handleApprove : undefined}
                 onBack={onBack}
                 saving={saving}
                 saveMessage={saveMessage}

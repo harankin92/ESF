@@ -47,11 +47,11 @@ export const api = {
         return res.json();
     },
 
-    async createEstimate(name, data) {
+    async createEstimate(name, data, projectId = null) {
         const res = await fetch(`${API_URL}/estimates`, {
             method: 'POST',
             headers: authHeaders(),
-            body: JSON.stringify({ name, data })
+            body: JSON.stringify({ name, data, project_id: projectId })
         });
         if (!res.ok) {
             const error = await res.json();
@@ -320,6 +320,57 @@ export const api = {
             const error = await res.json();
             throw new Error(error.error || 'Failed to update invoices');
         }
+        return res.json();
+    },
+
+    // Estimate Requests
+    async getEstimateRequests() {
+        const res = await fetch(`${API_URL}/estimate-requests`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch estimate requests');
+        return res.json();
+    },
+
+    async createEstimateRequest(projectId, scopeDescription) {
+        const res = await fetch(`${API_URL}/estimate-requests`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ project_id: projectId, scope_description: scopeDescription })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to create estimate request');
+        }
+        return res.json();
+    },
+
+    async completeEstimateRequest(requestId, estimateId) {
+        const res = await fetch(`${API_URL}/estimate-requests/${requestId}/complete`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ estimate_id: estimateId })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to complete estimate request');
+        }
+        return res.json();
+    },
+
+    async getProjectEstimates(projectId) {
+        const res = await fetch(`${API_URL}/projects/${projectId}/estimates`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch project estimates');
+        return res.json();
+    },
+
+    async getProjectEstimateRequests(projectId) {
+        const res = await fetch(`${API_URL}/projects/${projectId}/requests`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch project estimate requests');
         return res.json();
     }
 };

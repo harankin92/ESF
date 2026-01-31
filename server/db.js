@@ -248,11 +248,12 @@ export const initDb = async () => {
     db.run("ROLLBACK");
   }
 
-  // Projects table
+  // Projects table (1 Lead -> N Projects)
   db.run(`
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      lead_id INTEGER NOT NULL UNIQUE,
+      lead_id INTEGER NOT NULL,
+      name TEXT,
       status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Active', 'Paused', 'Finished')),
       assigned_pm INTEGER,
       assigned_developers TEXT,
@@ -267,6 +268,87 @@ export const initDb = async () => {
       FOREIGN KEY (assigned_pm) REFERENCES users(id)
     )
   `);
+
+  // Estimate requests table (PM requests estimate for a project)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS estimate_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      requested_by INTEGER NOT NULL,
+      scope_description TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN ('Pending', 'In Progress', 'Completed', 'Cancelled')),
+      estimate_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id),
+      FOREIGN KEY (requested_by) REFERENCES users(id),
+      FOREIGN KEY (estimate_id) REFERENCES estimates(id)
+    )
+  `);
+
+  // Migration: Add project_id to estimates if not exists
+  try {
+    const estTableInfo = db.exec("PRAGMA table_info(estimates)");
+    const estColumns = estTableInfo[0]?.values.map(col => col[1]) || [];
+    if (!estColumns.includes('project_id')) {
+      db.run('ALTER TABLE estimates ADD COLUMN project_id INTEGER REFERENCES projects(id)');
+      saveDb();
+      console.log('✓ Added project_id to estimates');
+    }
+  } catch (err) {
+    console.log('Migration note (project_id):', err.message);
+  }
+
+  // Migration: Add name to projects if not exists
+  try {
+    const projTableInfo = db.exec("PRAGMA table_info(projects)");
+    const projColumns = projTableInfo[0]?.values.map(col => col[1]) || [];
+    if (!projColumns.includes('name')) {
+      db.run('ALTER TABLE projects ADD COLUMN name TEXT');
+      saveDb();
+      console.log('✓ Added name to projects');
+    }
+  } catch (err) {
+    console.log('Migration note (projects.name):', err.message);
+  }
+
+  // Migration: Remove UNIQUE constraint from projects.lead_id (recreate table)
+  try {
+    const projSchema = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'")[0]?.values[0][0];
+    if (projSchema && projSchema.includes('UNIQUE')) {
+      console.log('Migrating projects table to remove UNIQUE constraint on lead_id...');
+      db.run("BEGIN TRANSACTION");
+      db.run("ALTER TABLE projects RENAME TO projects_old_unique");
+      db.run(`
+        CREATE TABLE projects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lead_id INTEGER NOT NULL,
+          name TEXT,
+          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Active', 'Paused', 'Finished')),
+          assigned_pm INTEGER,
+          assigned_developers TEXT,
+          credentials TEXT,
+          project_charter TEXT,
+          documentation TEXT,
+          changelog TEXT,
+          invoices TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (lead_id) REFERENCES leads(id),
+          FOREIGN KEY (assigned_pm) REFERENCES users(id)
+        )
+      `);
+      db.run(`INSERT INTO projects (id, lead_id, status, assigned_pm, assigned_developers, credentials, project_charter, documentation, changelog, invoices, created_at, updated_at)
+              SELECT id, lead_id, status, assigned_pm, assigned_developers, credentials, project_charter, documentation, changelog, invoices, created_at, updated_at FROM projects_old_unique`);
+      db.run("DROP TABLE projects_old_unique");
+      db.run("COMMIT");
+      saveDb();
+      console.log('✓ Migrated projects table (removed UNIQUE constraint)');
+    }
+  } catch (err) {
+    console.error('Projects UNIQUE migration failed:', err);
+    db.run("ROLLBACK");
+  }
 
   return db;
 };
@@ -314,10 +396,10 @@ export const setEstimateShareUuid = (id, uuid) => {
 };
 
 // Special insert helper that returns the new row
-export const insertEstimate = (name, createdBy, data) => {
+export const insertEstimate = (name, createdBy, data, projectId = null) => {
   db.run(
-    'INSERT INTO estimates (name, created_by, data) VALUES (?, ?, ?)',
-    [name, createdBy, data]
+    'INSERT INTO estimates (name, created_by, data, project_id) VALUES (?, ?, ?, ?)',
+    [name, createdBy, data, projectId]
   );
   saveDb();
 
@@ -407,13 +489,14 @@ export const getLeadsByCreator = (userId) => {
 };
 
 // Project helpers
-export const insertProject = (leadId) => {
+export const insertProject = (leadId, name = null) => {
   db.run(
-    'INSERT INTO projects (lead_id, changelog) VALUES (?, ?)',
-    [leadId, JSON.stringify([{ date: new Date().toISOString(), action: 'Project created from lead', user: 'System' }])]
+    'INSERT INTO projects (lead_id, name, changelog) VALUES (?, ?, ?)',
+    [leadId, name, JSON.stringify([{ date: new Date().toISOString(), action: 'Project created from lead', user: 'System' }])]
   );
   saveDb();
-  return queryOne('SELECT * FROM projects WHERE lead_id = ?', [leadId]);
+  // Return the newly created project (might have multiple per lead now)
+  return queryOne('SELECT * FROM projects WHERE lead_id = ? ORDER BY id DESC LIMIT 1', [leadId]);
 };
 
 export const updateProject = (id, updates) => {
@@ -474,6 +557,64 @@ export const getProjectsByPM = (pmId) => {
   `, [pmId]);
 };
 
+export const getProjectsByLeadId = (leadId) => {
+  return queryAll('SELECT * FROM projects WHERE lead_id = ? ORDER BY id DESC', [leadId]);
+};
+
+// Keep singular for backwards compat (returns first)
 export const getProjectByLeadId = (leadId) => {
-  return queryOne('SELECT * FROM projects WHERE lead_id = ?', [leadId]);
+  return queryOne('SELECT * FROM projects WHERE lead_id = ? ORDER BY id ASC', [leadId]);
+};
+
+// Estimate request helpers
+export const insertEstimateRequest = (projectId, requestedBy, scopeDescription) => {
+  db.run(
+    'INSERT INTO estimate_requests (project_id, requested_by, scope_description) VALUES (?, ?, ?)',
+    [projectId, requestedBy, scopeDescription]
+  );
+  saveDb();
+  return queryOne('SELECT * FROM estimate_requests WHERE project_id = ? ORDER BY id DESC LIMIT 1', [projectId]);
+};
+
+export const getEstimateRequestsByProject = (projectId) => {
+  return queryAll(`
+    SELECT er.*, u.name as requester_name
+    FROM estimate_requests er
+    LEFT JOIN users u ON er.requested_by = u.id
+    WHERE er.project_id = ?
+    ORDER BY er.created_at DESC
+  `, [projectId]);
+};
+
+export const getPendingEstimateRequests = () => {
+  return queryAll(`
+    SELECT er.*, u.name as requester_name, p.name as project_name, l.client_name
+    FROM estimate_requests er
+    LEFT JOIN users u ON er.requested_by = u.id
+    LEFT JOIN projects p ON er.project_id = p.id
+    LEFT JOIN leads l ON p.lead_id = l.id
+    WHERE er.status = 'Pending'
+    ORDER BY er.created_at ASC
+  `);
+};
+
+export const updateEstimateRequest = (id, updates) => {
+  const fields = Object.keys(updates);
+  const values = Object.values(updates);
+  const setClause = fields.map(f => `${f} = ?`).join(', ');
+
+  db.run(`UPDATE estimate_requests SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...values, id]);
+  saveDb();
+
+  return queryOne('SELECT * FROM estimate_requests WHERE id = ?', [id]);
+};
+
+export const getEstimatesByProject = (projectId) => {
+  return queryAll(`
+    SELECT e.*, u.name as creator_name
+    FROM estimates e
+    LEFT JOIN users u ON e.created_by = u.id
+    WHERE e.project_id = ?
+    ORDER BY e.created_at DESC
+  `, [projectId]);
 };

@@ -110,14 +110,14 @@ router.get('/:id', authenticateToken, (req, res) => {
 // POST /api/estimates - Create new estimate
 router.post('/', authenticateToken, canModifyEstimate, (req, res) => {
     try {
-        const { name, data } = req.body;
+        const { name, data, project_id } = req.body;
         const { id: userId } = req.user;
 
         if (!name || !data) {
             return res.status(400).json({ error: 'Name and data required' });
         }
 
-        const estimate = insertEstimate(name, userId, JSON.stringify(data));
+        const estimate = insertEstimate(name, userId, JSON.stringify(data), project_id || null);
 
         if (!estimate) {
             return res.status(500).json({ error: 'Failed to create estimate' });

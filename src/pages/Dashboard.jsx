@@ -19,7 +19,8 @@ import {
     Users,
     FileText,
     Briefcase,
-    FolderKanban
+    FolderKanban,
+    MessageSquare
 } from 'lucide-react';
 
 const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOpenProject }) => {
@@ -27,6 +28,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
     const [estimates, setEstimates] = useState([]);
     const [leads, setLeads] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [estimateRequests, setEstimateRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -63,6 +65,16 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
             if (user?.role === 'PM' || user?.role === 'Admin') {
                 const projectsData = await api.getProjects();
                 setProjects(projectsData);
+            }
+
+            // Load estimate requests for TechLead/Admin
+            if (user?.role === 'TechLead' || user?.role === 'Admin') {
+                try {
+                    const requestsData = await api.getEstimateRequests();
+                    setEstimateRequests(requestsData);
+                } catch (err) {
+                    console.error('Failed to load estimate requests:', err);
+                }
             }
         } catch (err) {
             setError('Failed to load data');
@@ -115,6 +127,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
             tabs.push({ id: 'pending', label: 'Pending Estimation', icon: Clock, count: pendingLeads.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'TechLead') {
+            tabs.push({ id: 'requests', label: 'Estimate Requests', icon: MessageSquare, count: estimateRequests.length });
             tabs.push({ id: 'pending', label: 'Pending Estimation', icon: Clock, count: pendingLeads.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'PM') {
@@ -310,6 +323,53 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 onOpen={onOpenLead}
                                                 onDelete={handleLeadDelete}
                                             />
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Estimate Requests Tab */}
+                        {activeTab === 'requests' && (
+                            <>
+                                {estimateRequests.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <MessageSquare size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No estimate requests</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            PMs will request estimates from their projects.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {estimateRequests.map(req => (
+                                            <div key={req.id} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full uppercase">
+                                                            {req.status}
+                                                        </span>
+                                                    </div>
+                                                    <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2">
+                                                        {req.client_name || 'Project Estimate'} {req.project_name && `- ${req.project_name}`}
+                                                    </h3>
+                                                    <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-4">
+                                                        {req.scope_description}
+                                                    </p>
+                                                </div>
+                                                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                                    <div className="text-xs text-slate-400">
+                                                        By {req.requester_name || 'PM'} • {new Date(req.created_at).toLocaleDateString()}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => onCreateNew({ requestId: req.id, projectId: req.project_id })}
+                                                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
+                                                    >
+                                                        <Plus size={14} />
+                                                        Start
+                                                    </button>
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 )}

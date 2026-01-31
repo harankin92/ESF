@@ -1,7 +1,8 @@
 import express from 'express';
 import {
     queryOne, queryAll, insertProject, updateProject,
-    getProjectWithDetails, getAllProjects, getProjectsByPM, getProjectByLeadId
+    getProjectWithDetails, getAllProjects, getProjectsByPM, getProjectByLeadId,
+    getEstimateRequestsByProject, getEstimatesByProject
 } from '../db.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
 
@@ -256,6 +257,38 @@ router.put('/:id/invoices', authenticateToken, authorize('PM', 'Admin'), (req, r
     } catch (error) {
         console.error('Update invoices error:', error);
         res.status(500).json({ error: 'Failed to update invoices' });
+    }
+});
+
+// GET /api/projects/:id/estimates - List estimates linked to project
+router.get('/:id/estimates', authenticateToken, (req, res) => {
+    try {
+        const project = queryOne('SELECT * FROM projects WHERE id = ?', [req.params.id]);
+        if (!project) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const estimates = getEstimatesByProject(req.params.id);
+        res.json(estimates);
+    } catch (error) {
+        console.error('Get project estimates error:', error);
+        res.status(500).json({ error: 'Failed to fetch project estimates' });
+    }
+});
+
+// GET /api/projects/:id/requests - List estimate requests for project
+router.get('/:id/requests', authenticateToken, (req, res) => {
+    try {
+        const project = queryOne('SELECT * FROM projects WHERE id = ?', [req.params.id]);
+        if (!project) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const requests = getEstimateRequestsByProject(req.params.id);
+        res.json(requests);
+    } catch (error) {
+        console.error('Get project requests error:', error);
+        res.status(500).json({ error: 'Failed to fetch project requests' });
     }
 });
 

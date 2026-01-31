@@ -6,6 +6,7 @@ import estimatesRoutes from './routes/estimates.js';
 import publicRoutes from './routes/public.js';
 import leadsRoutes from './routes/leads.js';
 import projectsRoutes from './routes/projects.js';
+import estimateRequestsRoutes from './routes/estimate-requests.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -23,6 +24,7 @@ app.use('/api/estimates', estimatesRoutes);
 app.use('/api/shared', publicRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/projects', projectsRoutes);
+app.use('/api/estimate-requests', estimateRequestsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -67,6 +69,13 @@ initDb().then(() => {
   - PUT  /api/projects/:id/documentation - Update docs
   - PUT  /api/projects/:id/changelog - Add changelog entry
   - PUT  /api/projects/:id/invoices - Update invoices
+  - GET  /api/projects/:id/estimates - List project estimates
+  - GET  /api/projects/:id/requests  - List estimate requests
+  
+  Estimate Request Endpoints:
+  - GET  /api/estimate-requests     - List pending (TechLead)
+  - POST /api/estimate-requests     - Create request (PM)
+  - PUT  /api/estimate-requests/:id/complete - Complete with estimate
   
   Test Users:
   - admin@test.com / admin123 (Admin)
