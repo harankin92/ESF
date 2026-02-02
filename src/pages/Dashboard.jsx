@@ -21,7 +21,8 @@ import {
     FileText,
     Briefcase,
     FolderKanban,
-    MessageSquare
+    MessageSquare,
+    Search
 } from 'lucide-react';
 
 const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOpenRequest, onOpenProject }) => {
@@ -99,11 +100,22 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
     };
 
     const handleLeadDelete = async (id) => {
+        if (!confirm('Delete this lead and all associated requests?')) return;
         try {
             await api.deleteLead(id);
             setLeads(prev => prev.filter(l => l.id !== id));
         } catch (err) {
             alert('Failed to delete lead: ' + err.message);
+        }
+    };
+
+    const handleDeleteRequest = async (id) => {
+        if (!confirm('Are you sure you want to delete this request? This action cannot be undone.')) return;
+        try {
+            await api.deleteRequest(id);
+            setRequests(prev => prev.filter(r => r.id !== id));
+        } catch (err) {
+            alert('Failed to delete request: ' + err.message);
         }
     };
 
@@ -134,7 +146,9 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
         } else if (user?.role === 'PreSale') {
             tabs.push({ id: 'pending-review', label: 'Pending Review', icon: FileText, count: pendingReviewRequests.length });
             tabs.push({ id: 'reviewing', label: 'Reviewing', icon: Clock, count: reviewingRequests.length });
+            tabs.push({ id: 'pending', label: 'In Estimation', icon: Search, count: pendingEstimationRequests.length });
             tabs.push({ id: 'presale-review', label: 'Estimate Review', icon: Layers, count: presaleReviewRequests.length });
+            tabs.push({ id: 'history', label: 'All Requests', icon: Briefcase, count: requests.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'Admin') {
             tabs.push({ id: 'leads', label: 'All Leads', icon: Briefcase, count: leads.length });
@@ -248,6 +262,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                         {activeTab === 'estimates' && 'Project Estimates'}
                         {activeTab === 'projects' && 'Projects'}
                         {activeTab === 'project-requests' && 'Project Estimate Requests'}
+                        {activeTab === 'history' && 'All Requests'}
                     </h2>
                     <div className="flex gap-2">
                         {activeTab === 'leads' && canCreateLead() && (
@@ -337,6 +352,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 key={request.id}
                                                 request={request}
                                                 onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
                                             />
                                         ))}
                                     </div>
@@ -409,6 +425,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 key={request.id}
                                                 request={request}
                                                 onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
                                             />
                                         ))}
                                     </div>
@@ -434,6 +451,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 key={request.id}
                                                 request={request}
                                                 onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
                                             />
                                         ))}
                                     </div>
@@ -459,6 +477,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 key={request.id}
                                                 request={request}
                                                 onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
                                             />
                                         ))}
                                     </div>
@@ -484,6 +503,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 key={request.id}
                                                 request={request}
                                                 onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
                                             />
                                         ))}
                                     </div>
@@ -509,6 +529,33 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 key={request.id}
                                                 request={request}
                                                 onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* History Tab (Requests Tracking for PreSale) */}
+                        {activeTab === 'history' && (
+                            <>
+                                {requests.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <Briefcase size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No requests found</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            Everything looks quiet here.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {requests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
                                             />
                                         ))}
                                     </div>

@@ -528,5 +528,32 @@ export const api = {
         });
         if (!res.ok) throw new Error('Failed to fetch project estimate requests');
         return res.json();
+    },
+
+    // Request Prioritization
+    async setRequestPriority(id, priority) {
+        const res = await fetch(`${API_URL}/requests/${id}/set-priority`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ priority })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to set priority');
+        }
+        return res.json();
+    },
+
+    async setRequestPresalePriority(id, presale_priority) {
+        const res = await fetch(`${API_URL}/requests/${id}/set-presale-priority`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ presale_priority })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to set presale priority');
+        }
+        return res.json();
     }
 };

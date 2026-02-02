@@ -20,25 +20,25 @@ router.get('/', authenticateToken, (req, res) => {
                 requests = getRequestsByCreator(userId);
                 break;
             case 'PreSale':
-                // PreSale sees requests in Pending Review, Reviewing, or assigned to them
+                // PreSale sees all requests that have been sent for review or assigned to them
                 requests = queryAll(`
                     SELECT requests.*, leads.client_name, leads.company, users.name as creator_name
                     FROM requests
                     LEFT JOIN leads ON requests.lead_id = leads.id
                     LEFT JOIN users ON requests.created_by = users.id
-                    WHERE requests.status IN ('Pending Review', 'Reviewing', 'Pending Estimation')
+                    WHERE requests.status NOT IN ('New')
                        OR requests.assigned_presale = ?
                     ORDER BY requests.created_at DESC
                 `, [userId]);
                 break;
             case 'TechLead':
-                // TechLead sees requests pending estimation or assigned to them
+                // TechLead sees requests pending estimation, in review, or assigned to them
                 requests = queryAll(`
                     SELECT requests.*, leads.client_name, leads.company, users.name as creator_name
                     FROM requests
                     LEFT JOIN leads ON requests.lead_id = leads.id
                     LEFT JOIN users ON requests.created_by = users.id
-                    WHERE requests.status = 'Pending Estimation'
+                    WHERE requests.status IN ('Pending Estimation', 'PreSale Review', 'Sale Review')
                        OR requests.assigned_techlead = ?
                     ORDER BY requests.created_at DESC
                 `, [userId]);
@@ -410,7 +410,7 @@ router.put('/:id/sale-request-edit', authenticateToken, authorize('Sale', 'Admin
         }
 
         const updated = updateRequest(req.params.id, {
-            status: 'Pending Estimation',
+            status: 'Reviewing',
             rejection_reason: req.body.rejection_reason || 'Changes requested by Sale'
         });
 
@@ -470,24 +470,26 @@ router.put('/:id/contract', authenticateToken, authorize('Sale', 'Admin'), (req,
 // DELETE /api/requests/:id - Delete request
 router.delete('/:id', authenticateToken, (req, res) => {
     try {
-        const request = queryOne('SELECT * FROM requests WHERE id = ?', [req.params.id]);
+        const { id } = req.params;
+        const { role, id: userId } = req.user;
+
+        const request = queryOne('SELECT * FROM requests WHERE id = ?', [id]);
         if (!request) {
             return res.status(404).json({ error: 'Request not found' });
         }
 
-        // Only creator or Admin can delete
-        if (request.created_by !== req.user.id && req.user.role !== 'Admin') {
-            return res.status(403).json({ error: 'Not authorized to delete this request' });
+        // Check permissions: Only creator or Admin can delete
+        if (role !== 'Admin' && request.created_by !== userId) {
+            return res.status(403).json({ error: 'Access denied' });
         }
 
         // Don't allow deletion if converted to contract
-        if (request.status === 'Contract') {
+        if (request.status === 'Contract' || request.status === 'Converted') {
             return res.status(400).json({ error: 'Cannot delete request that has been converted to contract' });
         }
 
-        run('DELETE FROM requests WHERE id = ?', [req.params.id]);
-
-        res.json({ message: 'Request deleted' });
+        run('DELETE FROM requests WHERE id = ?', [id]);
+        res.json({ message: 'Request deleted successfully' });
     } catch (error) {
         console.error('Delete request error:', error);
         res.status(500).json({ error: 'Failed to delete request' });

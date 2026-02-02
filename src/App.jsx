@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { api } from './services/api';
@@ -11,6 +11,7 @@ import LeadDetail from './pages/LeadDetail';
 import RequestForm from './pages/RequestForm';
 import RequestDetail from './pages/RequestDetail';
 import ProjectDetail from './pages/ProjectDetail';
+import { saveNavState, loadNavState } from './utils/navUtils';
 
 const AppContent = () => {
     const { user, loading } = useAuth();
@@ -23,6 +24,96 @@ const AppContent = () => {
     const [requestToEdit, setRequestToEdit] = useState(null);
     const [requestLeadId, setRequestLeadId] = useState(null);
     const [estimateContext, setEstimateContext] = useState(null);
+    const [isStateRestored, setIsStateRestored] = useState(false);
+
+    // Restore navigation state on mount
+    useEffect(() => {
+        if (user && !isStateRestored) {
+            try {
+                // Priority 1: URL parameters (for direct links/refresh)
+                const params = new URLSearchParams(window.location.search);
+                const viewParam = params.get('view');
+
+                if (viewParam) {
+                    setView(viewParam);
+                    setCurrentEstimateId(params.get('estimateId'));
+                    setCurrentLeadId(params.get('leadId'));
+                    setCurrentRequestId(params.get('requestId'));
+                    setCurrentProjectId(params.get('projectId'));
+                } else {
+                    // Priority 2: LocalStorage (for session persistence)
+                    const savedState = loadNavState();
+                    if (savedState) {
+                        if (savedState.view) setView(savedState.view);
+                        if (savedState.currentEstimateId) setCurrentEstimateId(savedState.currentEstimateId);
+                        if (savedState.currentLeadId) setCurrentLeadId(savedState.currentLeadId);
+                        if (savedState.currentRequestId) setCurrentRequestId(savedState.currentRequestId);
+                        if (savedState.currentProjectId) setCurrentProjectId(savedState.currentProjectId);
+                        if (savedState.estimateContext) setEstimateContext(savedState.estimateContext);
+                    }
+                }
+            } catch (err) {
+                console.error('State restoration failed:', err);
+            } finally {
+                setIsStateRestored(true);
+            }
+        }
+    }, [user, isStateRestored]);
+
+    // Save navigation state whenever it changes
+    useEffect(() => {
+        if (user && isStateRestored) {
+            saveNavState({
+                view,
+                currentEstimateId,
+                currentLeadId,
+                currentRequestId,
+                currentProjectId,
+                estimateContext
+            });
+
+            // Update URL using pushState (pseudo-routing)
+            const params = new URLSearchParams();
+            params.set('view', view);
+            if (currentEstimateId) params.set('estimateId', currentEstimateId);
+            if (currentLeadId) params.set('leadId', currentLeadId);
+            if (currentRequestId) params.set('requestId', currentRequestId);
+            if (currentProjectId) params.set('projectId', currentProjectId);
+
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            if (window.location.search !== `?${params.toString()}`) {
+                window.history.pushState({ view, currentEstimateId, currentLeadId, currentRequestId, currentProjectId }, '', newUrl);
+            }
+        }
+    }, [user, isStateRestored, view, currentEstimateId, currentLeadId, currentRequestId, currentProjectId, estimateContext]);
+
+    // Handle back button (popstate)
+    useEffect(() => {
+        const handlePopState = (event) => {
+            if (event.state) {
+                const { view, currentEstimateId, currentLeadId, currentRequestId, currentProjectId } = event.state;
+                setView(view || 'dashboard');
+                setCurrentEstimateId(currentEstimateId || null);
+                setCurrentLeadId(currentLeadId || null);
+                setCurrentRequestId(currentRequestId || null);
+                setCurrentProjectId(currentProjectId || null);
+            } else {
+                // Try to parse from URL if no state (direct entry or initial load)
+                const params = new URLSearchParams(window.location.search);
+                const viewParam = params.get('view');
+                if (viewParam) {
+                    setView(viewParam);
+                    setCurrentEstimateId(params.get('estimateId'));
+                    setCurrentLeadId(params.get('leadId'));
+                    setCurrentRequestId(params.get('requestId'));
+                    setCurrentProjectId(params.get('projectId'));
+                }
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
 
     if (loading) {
         return (
@@ -32,8 +123,8 @@ const AppContent = () => {
         );
     }
 
-    if (!user) {
-        return <Login />;
+    if (!user && view !== 'shared-report') {
+        return <Login onLoginSuccess={() => setView('dashboard')} />;
     }
 
     const handleOpenEstimate = (id, context = null) => {

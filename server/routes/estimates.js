@@ -6,24 +6,37 @@ import { authenticateToken, canModifyEstimate } from '../middleware/auth.js';
 const router = express.Router();
 
 // POST /api/estimates/:id/share - Generate share link
-router.post('/:id/share', authenticateToken, canModifyEstimate, (req, res) => {
+router.post('/:id/share', authenticateToken, (req, res) => {
     try {
         const { id } = req.params;
         const { role, id: userId } = req.user;
 
-        const existing = queryOne('SELECT * FROM estimates WHERE id = ?', [id]);
-        if (!existing) {
+        const estimate = queryOne('SELECT * FROM estimates WHERE id = ?', [id]);
+        if (!estimate) {
             return res.status(404).json({ error: 'Estimate not found' });
         }
 
-        // Check ownership
-        if (role !== 'Admin' && existing.created_by !== userId) {
+        // Access check:
+        // Admin, PreSale, PM see all
+        // TechLead sees only their own
+        // Sale sees only if linked to their request
+        let hasAccess = false;
+        if (role === 'Admin' || role === 'PreSale' || role === 'PM') {
+            hasAccess = true;
+        } else if (role === 'TechLead' && estimate.created_by === userId) {
+            hasAccess = true;
+        } else if (role === 'Sale') {
+            const linkedRequest = queryOne('SELECT id FROM requests WHERE estimate_id = ? AND created_by = ?', [id, userId]);
+            if (linkedRequest) hasAccess = true;
+        }
+
+        if (!hasAccess) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
         // Return existing UUID if present
-        if (existing.share_uuid) {
-            return res.json({ share_uuid: existing.share_uuid });
+        if (estimate.share_uuid) {
+            return res.json({ share_uuid: estimate.share_uuid });
         }
 
         // Generate new UUID

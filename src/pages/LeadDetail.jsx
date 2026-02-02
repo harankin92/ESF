@@ -53,6 +53,19 @@ const LeadDetail = ({ leadId, onBack, onOpenRequest, onCreateRequest, onEdit, on
         }
     };
 
+    const handleDeleteRequest = async (id) => {
+        if (!confirm('Are you sure you want to delete this request? This action cannot be undone.')) return;
+        try {
+            await api.deleteRequest(id);
+            setLead(prev => ({
+                ...prev,
+                requests: prev.requests.filter(r => r.id !== id)
+            }));
+        } catch (err) {
+            alert('Failed to delete request: ' + err.message);
+        }
+    };
+
     const getSourceColor = (source) => {
         const colors = {
             'Upwork': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -220,6 +233,7 @@ const LeadDetail = ({ leadId, onBack, onOpenRequest, onCreateRequest, onEdit, on
                                         key={request.id}
                                         request={request}
                                         onClick={onOpenRequest}
+                                        onDelete={handleDeleteRequest}
                                     />
                                 ))}
                             </div>

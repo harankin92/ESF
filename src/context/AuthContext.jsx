@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { clearNavState } from '../utils/navUtils';
 
 const AuthContext = createContext(null);
 
@@ -46,6 +47,8 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('token');
         setUser(null);
+        // Clear navigation state on logout
+        clearNavState();
     };
 
     // Permission helpers
@@ -72,6 +75,13 @@ export const AuthProvider = ({ children }) => {
         return false;
     };
 
+    const canEditEstimates = () => {
+        if (!user) return false;
+        // Sale role cannot edit estimates
+        if (user.role === 'Sale') return false;
+        return true;
+    };
+
     return (
         <AuthContext.Provider value={{
             user,
@@ -86,7 +96,8 @@ export const AuthProvider = ({ children }) => {
             canApproveLead,
             canViewLeads,
             canViewEstimates,
-            canEditLead // Exports the new permission
+            canEditLead,
+            canEditEstimates
         }}>
             {children}
         </AuthContext.Provider>

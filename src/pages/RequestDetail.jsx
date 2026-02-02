@@ -13,12 +13,16 @@ import {
     Globe,
     Clock,
     Link as LinkIcon,
+    Link2,
+    Copy,
+    Check,
     FileText,
     MessageSquare,
     User,
     CheckCircle,
     ExternalLink,
     Edit3,
+    Trash2,
     Save,
     X,
     Send,
@@ -48,6 +52,14 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
     const [estimates, setEstimates] = useState([]);
     const [selectedEstimate, setSelectedEstimate] = useState(null);
 
+    // Priority management
+    const [priority, setPriority] = useState('');
+    const [presalePriority, setPresalePriority] = useState('');
+
+    // Sharing link
+    const [shareLink, setShareLink] = useState('');
+    const [showCopySuccess, setShowCopySuccess] = useState(false);
+
     const canEditRequest = (req) => {
         if (!req) return false;
         if (user?.role === 'Admin') return true;
@@ -60,6 +72,14 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
             const data = await api.getRequest(requestId);
             setRequest(data);
             setOverviewText(data.project_overview || '');
+            setPriority(data.priority || '');
+            setPresalePriority(data.presale_priority || '');
+
+            // Load share link if estimate exists
+            if (data.estimate && data.estimate.share_uuid) {
+                const baseUrl = window.location.origin;
+                setShareLink(`${baseUrl}/share/${data.estimate.share_uuid}`);
+            }
         } catch (err) {
             setError(err.message);
         } finally {
@@ -214,6 +234,61 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
         }
     };
 
+    const handleSetPriority = async (newPriority) => {
+        try {
+            await api.setRequestPriority(requestId, newPriority);
+            setPriority(newPriority);
+            setSuccess('Priority updated!');
+            setTimeout(() => setSuccess(''), 2000);
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    const handleDeleteRequest = async () => {
+        if (!confirm('Are you sure you want to delete this request? This action cannot be undone.')) return;
+        try {
+            await api.deleteRequest(requestId);
+            setSuccess('Request deleted successfully!');
+            setTimeout(() => {
+                onBack();
+            }, 1500);
+        } catch (err) {
+            setError('Failed to delete request: ' + err.message);
+        }
+    };
+
+    const handleSetPresalePriority = async (newPriority) => {
+        try {
+            await api.setRequestPresalePriority(requestId, newPriority);
+            setPresalePriority(newPriority);
+            setSuccess('Priority updated!');
+            setTimeout(() => setSuccess(''), 2000);
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    const handleGenerateShareLink = async () => {
+        try {
+            if (!request.estimate_id) return;
+            const result = await api.shareEstimate(request.estimate_id);
+            const baseUrl = window.location.origin;
+            const link = `${baseUrl}/share/${result.share_uuid}`;
+            setShareLink(link);
+            setSuccess('Share link generated!');
+            setTimeout(() => setSuccess(''), 2000);
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    const handleCopyShareLink = () => {
+        navigator.clipboard.writeText(shareLink);
+        setShowCopySuccess(true);
+        setTimeout(() => setShowCopySuccess(false), 2000);
+    };
+
     const InfoRow = ({ icon: Icon, label, value, isLink }) => {
         if (!value) return null;
         return (
@@ -234,6 +309,23 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
         );
     };
 
+    const getStatusColor = (status) => {
+        const colors = {
+            'New': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+            'Pending Review': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+            'Reviewing': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+            'Pending Estimation': 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+            'Estimated': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+            'PreSale Review': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+            'Sale Review': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+            'Accepted': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+            'Rejected': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+            'Contract': 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+        };
+        return colors[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400';
+    };
+
+
     if (loading) {
         return (
             <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
@@ -242,7 +334,7 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
         );
     }
 
-    if (error || !request) {
+    if (!request) {
         return (
             <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
                 <div className="text-center">
@@ -261,7 +353,7 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
             {/* Header */}
             <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30">
-                <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+                <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                             <ArrowLeft size={20} className="text-slate-600 dark:text-slate-400" />
@@ -269,17 +361,35 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
                         <div>
                             <div className="flex items-center gap-3">
                                 <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                                    {request.client_name || 'Request'}
+                                    {request.project_name || 'Untitled Project'} | {request.client_name || 'Unknown Client'}
                                 </h1>
-                                <StatusBadge status={request.status} />
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(request.status)}`}>
+                                    {request.status}
+                                </span>
+                                {priority && (
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${priority === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                        priority === 'Medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                            'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                        }`}>
+                                        Priority: {priority}
+                                    </span>
+                                )}
+                                {presalePriority && user?.role === 'TechLead' && (
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${presalePriority === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                        presalePriority === 'Medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                            'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                        }`}>
+                                        PreSale Priority: {presalePriority}
+                                    </span>
+                                )}
                             </div>
                             <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                                {request.work_type || 'Request'} • {request.cooperation_model || 'TBD'}
+                                {request.work_type || 'Request'} • {request.cooperation_model || 'TBD'} • ID: {request.id}
                             </p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {canEditRequest(request) && request.status === 'New' && (
+                        {canEditRequest(request) && (
                             <button
                                 onClick={() => onEdit?.(request)}
                                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
@@ -288,15 +398,128 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
                                 <Edit3 size={18} className="text-slate-600 dark:text-slate-400" />
                             </button>
                         )}
+                        {(user?.role === 'Admin' || request.created_by === user?.id) && request.status !== 'Contract' && (
+                            <button
+                                onClick={handleDeleteRequest}
+                                className="p-2 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                title="Delete Request"
+                            >
+                                <Trash2 size={18} className="text-red-500" />
+                            </button>
+                        )}
                     </div>
                 </div>
             </header>
 
             <main className="max-w-5xl mx-auto px-4 py-8">
+                {/* Actions Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    {/* Public Sharing Link */}
+                    {request.estimate_id && (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <Globe size={14} />
+                                Public Access
+                            </h3>
+                            {shareLink ? (
+                                <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                                    <Link2 size={16} className="text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+                                    <span className="text-xs font-mono text-indigo-700 dark:text-indigo-300 flex-1 truncate">{shareLink}</span>
+                                    <button
+                                        onClick={handleCopyShareLink}
+                                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                    >
+                                        {showCopySuccess ? (
+                                            <>
+                                                <Check size={12} />
+                                                COPIED
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy size={12} />
+                                                COPY
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={handleGenerateShareLink}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-200 dark:shadow-none transition-all"
+                                >
+                                    <Link2 size={16} />
+                                    Generate Public Share Link
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Priority Selector for Sale */}
+                    {user?.role === 'Sale' && canEditRequest(request) && ['New', 'Pending Review'].includes(request.status) && (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Set Request Priority</h3>
+                            <div className="flex items-center gap-2">
+                                {['High', 'Medium', 'Low'].map(p => (
+                                    <button
+                                        key={p}
+                                        onClick={() => handleSetPriority(p)}
+                                        className={`flex-1 px-4 py-3 rounded-xl text-sm font-bold transition-all border ${priority === p
+                                            ? p === 'High' ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400' :
+                                                p === 'Medium' ? 'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400' :
+                                                    'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
+                                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-750'
+                                            }`}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Priority Selector for PreSale */}
+                    {user?.role === 'PreSale' && ['Reviewing', 'Pending Estimation'].includes(request.status) && (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Set Priority for TechLead</h3>
+                            <div className="flex items-center gap-2">
+                                {['High', 'Medium', 'Low'].map(p => (
+                                    <button
+                                        key={p}
+                                        onClick={() => handleSetPresalePriority(p)}
+                                        className={`flex-1 px-4 py-3 rounded-xl text-sm font-bold transition-all border ${presalePriority === p
+                                            ? p === 'High' ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400' :
+                                                p === 'Medium' ? 'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400' :
+                                                    'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
+                                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-750'
+                                            }`}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {error && (
+                    <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl flex items-center justify-between gap-3 text-red-600 dark:text-red-400">
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle size={20} />
+                            <span className="text-sm font-medium">{error}</span>
+                        </div>
+                        <button onClick={() => setError('')} className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors">
+                            <X size={16} />
+                        </button>
+                    </div>
+                )}
                 {success && (
-                    <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle size={20} />
-                        <span className="text-sm font-medium">{success}</span>
+                    <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-center justify-between gap-3 text-emerald-600 dark:text-emerald-400">
+                        <div className="flex items-center gap-3">
+                            <CheckCircle size={20} />
+                            <span className="text-sm font-medium">{success}</span>
+                        </div>
+                        <button onClick={() => setSuccess('')} className="p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded-lg transition-colors">
+                            <X size={16} />
+                        </button>
                     </div>
                 )}
                 {/* Action Banner */}
