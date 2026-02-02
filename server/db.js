@@ -37,20 +37,40 @@ export const initDb = async () => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       created_by INTEGER NOT NULL,
+      request_id INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       data TEXT NOT NULL,
-      FOREIGN KEY (created_by) REFERENCES users(id)
+      edit_history TEXT DEFAULT '[]',
+      FOREIGN KEY (created_by) REFERENCES users(id),
+      FOREIGN KEY (request_id) REFERENCES requests(id)
     )
   `);
 
-  // Leads table
+  // NEW simplified Leads table - just client info
   db.run(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_by INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Pending Review', 'Reviewing', 'Pending Estimation', 'Estimated')),
       client_name TEXT NOT NULL,
+      company TEXT,
+      timezone TEXT,
+      source TEXT CHECK(source IN ('Upwork', 'LinkedIn', 'Website', 'Referral', 'Other')),
+      status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'In Progress', 'Closed')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
+
+  // NEW Requests table - project details (1 Lead -> N Requests)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id INTEGER NOT NULL,
+      created_by INTEGER NOT NULL,
+      project_name TEXT,
+      status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Pending Review', 'Reviewing', 'Rejected', 'Pending Estimation', 'Estimated', 'PreSale Review', 'Sale Review', 'Accepted', 'Contract')),
       cooperation_model TEXT,
       work_type TEXT,
       tech_stack TEXT,
@@ -62,19 +82,21 @@ export const initDb = async () => {
       team_need TEXT,
       english_level TEXT,
       meetings TEXT,
-      timezone TEXT,
       project_stage TEXT,
       intro_call_link TEXT,
+      call_summary TEXT,
       presentation_link TEXT,
       business_idea TEXT,
       job_description TEXT,
       design_link TEXT,
       project_overview TEXT,
+      rejection_reason TEXT,
       estimate_id INTEGER,
       assigned_presale INTEGER,
       assigned_techlead INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
       FOREIGN KEY (created_by) REFERENCES users(id),
       FOREIGN KEY (estimate_id) REFERENCES estimates(id),
       FOREIGN KEY (assigned_presale) REFERENCES users(id),
@@ -132,73 +154,58 @@ export const initDb = async () => {
     console.log('Migration note:', err.message);
   }
 
-  // Migration: Update leads table to support 'Pending Review'
+  // Migration: Add project_id to estimates if not exists
   try {
-    const leadsSchema = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='leads'")[0]?.values[0][0];
-    if (leadsSchema && !leadsSchema.includes("'Pending Review'")) {
-      console.log('Migrating leads table to support Pending Review status...');
-      db.run("BEGIN TRANSACTION");
-      db.run("ALTER TABLE leads RENAME TO leads_old");
-      db.run(`
-        CREATE TABLE leads (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          created_by INTEGER NOT NULL,
-          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Pending Review', 'Reviewing', 'Pending Estimation', 'Estimated')),
-          client_name TEXT NOT NULL,
-          cooperation_model TEXT,
-          work_type TEXT,
-          tech_stack TEXT,
-          hourly_rate REAL,
-          budget TEXT,
-          timeframe TEXT,
-          deadline TEXT,
-          start_date TEXT,
-          team_need TEXT,
-          english_level TEXT,
-          meetings TEXT,
-          timezone TEXT,
-          project_stage TEXT,
-          intro_call_link TEXT,
-          presentation_link TEXT,
-          business_idea TEXT,
-          job_description TEXT,
-          design_link TEXT,
-          project_overview TEXT,
-          estimate_id INTEGER,
-          assigned_presale INTEGER,
-          assigned_techlead INTEGER,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (created_by) REFERENCES users(id),
-          FOREIGN KEY (estimate_id) REFERENCES estimates(id),
-          FOREIGN KEY (assigned_presale) REFERENCES users(id),
-          FOREIGN KEY (assigned_techlead) REFERENCES users(id)
-        )
-      `);
-      db.run("INSERT INTO leads SELECT * FROM leads_old");
-      db.run("DROP TABLE leads_old");
-      db.run("COMMIT");
+    const estTableInfo = db.exec("PRAGMA table_info(estimates)");
+    const estColumns = estTableInfo[0]?.values.map(col => col[1]) || [];
+    if (!estColumns.includes('project_id')) {
+      db.run('ALTER TABLE estimates ADD COLUMN project_id INTEGER REFERENCES projects(id)');
       saveDb();
-      console.log('✓ Migrated leads table');
+      console.log('✓ Added project_id to estimates');
     }
   } catch (err) {
-    console.error('Leads migration failed:', err);
-    db.run("ROLLBACK");
+    console.log('Migration note (project_id):', err.message);
   }
 
-  // Migration: Add Rejected and Contract statuses to leads
+  // === MIGRATION: Old leads table to new structure ===
   try {
-    const leadsSchema = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='leads'")[0]?.values[0][0];
-    if (leadsSchema && !leadsSchema.includes("'Rejected'")) {
-      console.log('Migrating leads table to support Rejected/Contract statuses...');
+    const leadsTableInfo = db.exec("PRAGMA table_info(leads)");
+    const leadsColumns = leadsTableInfo[0]?.values.map(col => col[1]) || [];
+
+    // Check if old structure exists (has cooperation_model in leads)
+    if (leadsColumns.includes('cooperation_model')) {
+      console.log('Migrating old leads structure to Lead + Request...');
       db.run("BEGIN TRANSACTION");
-      db.run("ALTER TABLE leads RENAME TO leads_old2");
+
+      // Get all old leads
+      const oldLeads = queryAll('SELECT * FROM leads');
+
+      // Rename old table
+      db.run("ALTER TABLE leads RENAME TO leads_old_migration");
+
+      // Create new leads table
       db.run(`
         CREATE TABLE leads (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           created_by INTEGER NOT NULL,
-          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Pending Review', 'Reviewing', 'Pending Estimation', 'Estimated', 'Rejected', 'Contract')),
           client_name TEXT NOT NULL,
+          company TEXT,
+          timezone TEXT,
+          source TEXT CHECK(source IN ('Upwork', 'LinkedIn', 'Website', 'Referral', 'Other')),
+          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'In Progress', 'Closed')),
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+      `);
+
+      // Create requests table if not exists
+      db.run(`
+        CREATE TABLE IF NOT EXISTS requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lead_id INTEGER NOT NULL,
+          created_by INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Pending Review', 'Reviewing', 'Rejected', 'Pending Estimation', 'Estimated', 'PreSale Review', 'Sale Review', 'Accepted', 'Contract')),
           cooperation_model TEXT,
           work_type TEXT,
           tech_stack TEXT,
@@ -210,9 +217,9 @@ export const initDb = async () => {
           team_need TEXT,
           english_level TEXT,
           meetings TEXT,
-          timezone TEXT,
           project_stage TEXT,
           intro_call_link TEXT,
+          call_summary TEXT,
           presentation_link TEXT,
           business_idea TEXT,
           job_description TEXT,
@@ -224,28 +231,55 @@ export const initDb = async () => {
           assigned_techlead INTEGER,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
           FOREIGN KEY (created_by) REFERENCES users(id),
           FOREIGN KEY (estimate_id) REFERENCES estimates(id),
           FOREIGN KEY (assigned_presale) REFERENCES users(id),
           FOREIGN KEY (assigned_techlead) REFERENCES users(id)
         )
       `);
-      db.run(`INSERT INTO leads (id, created_by, status, client_name, cooperation_model, work_type, tech_stack, 
-        hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings, timezone,
-        project_stage, intro_call_link, presentation_link, business_idea, job_description, design_link,
-        project_overview, estimate_id, assigned_presale, assigned_techlead, created_at, updated_at)
-        SELECT id, created_by, status, client_name, cooperation_model, work_type, tech_stack,
-        hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings, timezone,
-        project_stage, intro_call_link, presentation_link, business_idea, job_description, design_link,
-        project_overview, estimate_id, assigned_presale, assigned_techlead, created_at, updated_at FROM leads_old2`);
-      db.run("DROP TABLE leads_old2");
+
+      // Migrate each old lead
+      for (const oldLead of oldLeads) {
+        // Insert new lead with basic info
+        const leadStatus = oldLead.status === 'Contract' ? 'Closed' :
+          (oldLead.status === 'New' ? 'New' : 'In Progress');
+
+        db.run(
+          `INSERT INTO leads (id, created_by, client_name, company, timezone, source, status, created_at, updated_at)
+           VALUES (?, ?, ?, NULL, ?, 'Other', ?, ?, ?)`,
+          [oldLead.id, oldLead.created_by, oldLead.client_name, oldLead.timezone, leadStatus, oldLead.created_at, oldLead.updated_at]
+        );
+
+        // Insert request with project details
+        db.run(
+          `INSERT INTO requests (lead_id, created_by, status, cooperation_model, work_type, tech_stack,
+            hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings,
+            project_stage, intro_call_link, call_summary, presentation_link, business_idea, job_description,
+            design_link, project_overview, rejection_reason, estimate_id, assigned_presale, assigned_techlead,
+            created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            oldLead.id, oldLead.created_by, oldLead.status, oldLead.cooperation_model, oldLead.work_type,
+            oldLead.tech_stack, oldLead.hourly_rate, oldLead.budget, oldLead.timeframe, oldLead.deadline,
+            oldLead.start_date, oldLead.team_need, oldLead.english_level, oldLead.meetings, oldLead.project_stage,
+            oldLead.intro_call_link, oldLead.presentation_link, oldLead.business_idea, oldLead.job_description,
+            oldLead.design_link, oldLead.project_overview, oldLead.rejection_reason, oldLead.estimate_id,
+            oldLead.assigned_presale, oldLead.assigned_techlead, oldLead.created_at, oldLead.updated_at
+          ]
+        );
+      }
+
+      // Drop old table
+      db.run("DROP TABLE leads_old_migration");
+
       db.run("COMMIT");
       saveDb();
-      console.log('✓ Migrated leads table with Rejected/Contract statuses');
+      console.log(`✓ Migrated ${oldLeads.length} leads to new structure`);
     }
   } catch (err) {
-    console.error('Leads Rejected/Contract migration failed:', err);
-    db.run("ROLLBACK");
+    console.error('Lead migration failed:', err);
+    try { db.run("ROLLBACK"); } catch (e) { }
   }
 
   // Projects table (1 Lead -> N Projects)
@@ -253,6 +287,7 @@ export const initDb = async () => {
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id INTEGER NOT NULL,
+      request_id INTEGER,
       name TEXT,
       status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Active', 'Paused', 'Finished')),
       assigned_pm INTEGER,
@@ -265,9 +300,146 @@ export const initDb = async () => {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (lead_id) REFERENCES leads(id),
+      FOREIGN KEY (request_id) REFERENCES requests(id),
       FOREIGN KEY (assigned_pm) REFERENCES users(id)
     )
   `);
+
+  // Migration: Add request_id to projects if not exists
+  try {
+    const projTableInfo = db.exec("PRAGMA table_info(projects)");
+    const projColumns = projTableInfo[0]?.values.map(col => col[1]) || [];
+    if (!projColumns.includes('request_id')) {
+      db.run('ALTER TABLE projects ADD COLUMN request_id INTEGER REFERENCES requests(id)');
+      saveDb();
+      console.log('✓ Added request_id to projects');
+    }
+    if (!projColumns.includes('name')) {
+      db.run('ALTER TABLE projects ADD COLUMN name TEXT');
+      saveDb();
+      console.log('✓ Added name to projects');
+    }
+  } catch (err) {
+    console.log('Migration note (projects):', err.message);
+  }
+
+  // Migration: Add new columns to requests if not exists
+  try {
+    const reqTableInfo = db.exec("PRAGMA table_info(requests)");
+    const reqColumns = reqTableInfo[0]?.values.map(col => col[1]) || [];
+    if (!reqColumns.includes('project_name')) {
+      db.run('ALTER TABLE requests ADD COLUMN project_name TEXT');
+      saveDb();
+      console.log('✓ Added project_name to requests');
+    }
+    if (!reqColumns.includes('rejection_reason')) {
+      db.run('ALTER TABLE requests ADD COLUMN rejection_reason TEXT');
+      saveDb();
+      console.log('✓ Added rejection_reason to requests');
+    }
+  } catch (err) {
+    console.log('Migration note (requests columns):', err.message);
+  }
+
+  // Migration: Add request_id and edit_history to estimates if not exists
+  try {
+    const estTableInfo = db.exec("PRAGMA table_info(estimates)");
+    const estColumns = estTableInfo[0]?.values.map(col => col[1]) || [];
+    if (!estColumns.includes('request_id')) {
+      db.run('ALTER TABLE estimates ADD COLUMN request_id INTEGER REFERENCES requests(id)');
+      saveDb();
+      console.log('✓ Added request_id to estimates');
+    }
+    if (!estColumns.includes('edit_history')) {
+      db.run("ALTER TABLE estimates ADD COLUMN edit_history TEXT DEFAULT '[]'");
+      saveDb();
+      console.log('✓ Added edit_history to estimates');
+    }
+  } catch (err) {
+    console.log('Migration note (estimates):', err.message);
+  }
+
+  // Migration: Update requests table CHECK constraint if needed
+  try {
+    const tableSql = db.exec("SELECT sql FROM sqlite_master WHERE name='requests'")[0].values[0][0];
+    if (!tableSql.includes('PreSale Review') || !tableSql.includes('Sale Review') || !tableSql.includes('Accepted')) {
+      console.log('Updating requests table CHECK constraint...');
+
+      db.run("BEGIN TRANSACTION");
+
+      // 1. Rename old table
+      db.run("ALTER TABLE requests RENAME TO requests_old_constraint");
+
+      // 2. Create new table with correct constraint
+      db.run(`
+        CREATE TABLE requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          lead_id INTEGER NOT NULL,
+          created_by INTEGER NOT NULL,
+          project_name TEXT,
+          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Pending Review', 'Reviewing', 'Rejected', 'Pending Estimation', 'Estimated', 'PreSale Review', 'Sale Review', 'Accepted', 'Contract')),
+          cooperation_model TEXT,
+          work_type TEXT,
+          tech_stack TEXT,
+          hourly_rate REAL,
+          budget TEXT,
+          timeframe TEXT,
+          deadline TEXT,
+          start_date TEXT,
+          team_need TEXT,
+          english_level TEXT,
+          meetings TEXT,
+          project_stage TEXT,
+          intro_call_link TEXT,
+          call_summary TEXT,
+          presentation_link TEXT,
+          business_idea TEXT,
+          job_description TEXT,
+          design_link TEXT,
+          project_overview TEXT,
+          rejection_reason TEXT,
+          estimate_id INTEGER,
+          assigned_presale INTEGER,
+          assigned_techlead INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+          FOREIGN KEY (created_by) REFERENCES users(id),
+          FOREIGN KEY (estimate_id) REFERENCES estimates(id),
+          FOREIGN KEY (assigned_presale) REFERENCES users(id),
+          FOREIGN KEY (assigned_techlead) REFERENCES users(id)
+        )
+      `);
+
+      // 3. Copy data
+      db.run(`
+        INSERT INTO requests (
+          id, lead_id, created_by, project_name, status, cooperation_model, work_type, tech_stack,
+          hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings,
+          project_stage, intro_call_link, call_summary, presentation_link, business_idea, job_description,
+          design_link, project_overview, rejection_reason, estimate_id, assigned_presale, assigned_techlead,
+          created_at, updated_at
+        )
+        SELECT 
+          id, lead_id, created_by, project_name, status, cooperation_model, work_type, tech_stack,
+          hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings,
+          project_stage, intro_call_link, call_summary, presentation_link, business_idea, job_description,
+          design_link, project_overview, rejection_reason, estimate_id, assigned_presale, assigned_techlead,
+          created_at, updated_at
+        FROM requests_old_constraint
+      `);
+
+      // 4. Drop old table
+      db.run("DROP TABLE requests_old_constraint");
+
+      db.run("COMMIT");
+      saveDb();
+      console.log('✓ Successfully updated requests table CHECK constraint and kept all data');
+    }
+  } catch (err) {
+    console.log('Migration note (requests constraint):', err.message);
+    try { db.run("ROLLBACK"); } catch (e) { }
+  }
 
   // Estimate requests table (PM requests estimate for a project)
   db.run(`
@@ -285,70 +457,6 @@ export const initDb = async () => {
       FOREIGN KEY (estimate_id) REFERENCES estimates(id)
     )
   `);
-
-  // Migration: Add project_id to estimates if not exists
-  try {
-    const estTableInfo = db.exec("PRAGMA table_info(estimates)");
-    const estColumns = estTableInfo[0]?.values.map(col => col[1]) || [];
-    if (!estColumns.includes('project_id')) {
-      db.run('ALTER TABLE estimates ADD COLUMN project_id INTEGER REFERENCES projects(id)');
-      saveDb();
-      console.log('✓ Added project_id to estimates');
-    }
-  } catch (err) {
-    console.log('Migration note (project_id):', err.message);
-  }
-
-  // Migration: Add name to projects if not exists
-  try {
-    const projTableInfo = db.exec("PRAGMA table_info(projects)");
-    const projColumns = projTableInfo[0]?.values.map(col => col[1]) || [];
-    if (!projColumns.includes('name')) {
-      db.run('ALTER TABLE projects ADD COLUMN name TEXT');
-      saveDb();
-      console.log('✓ Added name to projects');
-    }
-  } catch (err) {
-    console.log('Migration note (projects.name):', err.message);
-  }
-
-  // Migration: Remove UNIQUE constraint from projects.lead_id (recreate table)
-  try {
-    const projSchema = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'")[0]?.values[0][0];
-    if (projSchema && projSchema.includes('UNIQUE')) {
-      console.log('Migrating projects table to remove UNIQUE constraint on lead_id...');
-      db.run("BEGIN TRANSACTION");
-      db.run("ALTER TABLE projects RENAME TO projects_old_unique");
-      db.run(`
-        CREATE TABLE projects (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          lead_id INTEGER NOT NULL,
-          name TEXT,
-          status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Active', 'Paused', 'Finished')),
-          assigned_pm INTEGER,
-          assigned_developers TEXT,
-          credentials TEXT,
-          project_charter TEXT,
-          documentation TEXT,
-          changelog TEXT,
-          invoices TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (lead_id) REFERENCES leads(id),
-          FOREIGN KEY (assigned_pm) REFERENCES users(id)
-        )
-      `);
-      db.run(`INSERT INTO projects (id, lead_id, status, assigned_pm, assigned_developers, credentials, project_charter, documentation, changelog, invoices, created_at, updated_at)
-              SELECT id, lead_id, status, assigned_pm, assigned_developers, credentials, project_charter, documentation, changelog, invoices, created_at, updated_at FROM projects_old_unique`);
-      db.run("DROP TABLE projects_old_unique");
-      db.run("COMMIT");
-      saveDb();
-      console.log('✓ Migrated projects table (removed UNIQUE constraint)');
-    }
-  } catch (err) {
-    console.error('Projects UNIQUE migration failed:', err);
-    db.run("ROLLBACK");
-  }
 
   return db;
 };
@@ -396,10 +504,10 @@ export const setEstimateShareUuid = (id, uuid) => {
 };
 
 // Special insert helper that returns the new row
-export const insertEstimate = (name, createdBy, data, projectId = null) => {
+export const insertEstimate = (name, createdBy, data, projectId = null, requestId = null, editHistory = '[]') => {
   db.run(
-    'INSERT INTO estimates (name, created_by, data, project_id) VALUES (?, ?, ?, ?)',
-    [name, createdBy, data, projectId]
+    'INSERT INTO estimates (name, created_by, data, project_id, request_id, edit_history) VALUES (?, ?, ?, ?, ?, ?)',
+    [name, createdBy, data, projectId, requestId, editHistory]
   );
   saveDb();
 
@@ -411,28 +519,14 @@ export const insertEstimate = (name, createdBy, data, projectId = null) => {
   return result;
 };
 
-// Lead helpers
+// Lead helpers (simplified)
 export const insertLead = (leadData) => {
-  const {
-    created_by, client_name, cooperation_model, work_type, tech_stack,
-    hourly_rate, budget, timeframe, deadline, start_date, team_need,
-    english_level, meetings, timezone, project_stage, intro_call_link,
-    presentation_link, business_idea, job_description, design_link
-  } = leadData;
+  const { created_by, client_name, company, timezone, source } = leadData;
 
   db.run(
-    `INSERT INTO leads (
-      created_by, client_name, cooperation_model, work_type, tech_stack,
-      hourly_rate, budget, timeframe, deadline, start_date, team_need,
-      english_level, meetings, timezone, project_stage, intro_call_link,
-      presentation_link, business_idea, job_description, design_link, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New')`,
-    [
-      created_by, client_name, cooperation_model, work_type, tech_stack,
-      hourly_rate, budget, timeframe, deadline, start_date, team_need,
-      english_level, meetings, timezone, project_stage, intro_call_link,
-      presentation_link, business_idea, job_description, design_link
-    ]
+    `INSERT INTO leads (created_by, client_name, company, timezone, source, status)
+     VALUES (?, ?, ?, ?, ?, 'New')`,
+    [created_by, client_name, company, timezone, source]
   );
   saveDb();
 
@@ -461,26 +555,18 @@ export const getLeadWithCreator = (id) => {
 
 export const getAllLeads = () => {
   return queryAll(`
-    SELECT leads.*, users.name as creator_name
+    SELECT leads.*, users.name as creator_name,
+           (SELECT COUNT(*) FROM requests WHERE requests.lead_id = leads.id) as request_count
     FROM leads
     LEFT JOIN users ON leads.created_by = users.id
     ORDER BY leads.created_at DESC
   `);
 };
 
-export const getLeadsByStatus = (status) => {
-  return queryAll(`
-    SELECT leads.*, users.name as creator_name
-    FROM leads
-    LEFT JOIN users ON leads.created_by = users.id
-    WHERE leads.status = ?
-    ORDER BY leads.created_at DESC
-  `, [status]);
-};
-
 export const getLeadsByCreator = (userId) => {
   return queryAll(`
-    SELECT leads.*, users.name as creator_name
+    SELECT leads.*, users.name as creator_name,
+           (SELECT COUNT(*) FROM requests WHERE requests.lead_id = leads.id) as request_count
     FROM leads
     LEFT JOIN users ON leads.created_by = users.id
     WHERE leads.created_by = ?
@@ -488,14 +574,114 @@ export const getLeadsByCreator = (userId) => {
   `, [userId]);
 };
 
-// Project helpers
-export const insertProject = (leadId, name = null) => {
+// Request helpers
+export const insertRequest = (requestData) => {
+  const {
+    lead_id, created_by, project_name, cooperation_model, work_type, tech_stack,
+    hourly_rate, budget, timeframe, deadline, start_date, team_need,
+    english_level, meetings, project_stage, intro_call_link, call_summary,
+    presentation_link, business_idea, job_description, design_link
+  } = requestData;
+
   db.run(
-    'INSERT INTO projects (lead_id, name, changelog) VALUES (?, ?, ?)',
-    [leadId, name, JSON.stringify([{ date: new Date().toISOString(), action: 'Project created from lead', user: 'System' }])]
+    `INSERT INTO requests (
+      lead_id, created_by, project_name, cooperation_model, work_type, tech_stack,
+      hourly_rate, budget, timeframe, deadline, start_date, team_need,
+      english_level, meetings, project_stage, intro_call_link, call_summary,
+      presentation_link, business_idea, job_description, design_link, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New')`,
+    [
+      lead_id, created_by, project_name, cooperation_model, work_type, tech_stack,
+      hourly_rate, budget, timeframe, deadline, start_date, team_need,
+      english_level, meetings, project_stage, intro_call_link, call_summary,
+      presentation_link, business_idea, job_description, design_link
+    ]
   );
   saveDb();
-  // Return the newly created project (might have multiple per lead now)
+
+  // Update lead status to In Progress
+  db.run(`UPDATE leads SET status = 'In Progress', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [lead_id]);
+  saveDb();
+
+  return queryOne('SELECT * FROM requests WHERE lead_id = ? ORDER BY id DESC LIMIT 1', [lead_id]);
+};
+
+export const updateRequest = (id, updates) => {
+  const fields = Object.keys(updates);
+  const values = Object.values(updates);
+  const setClause = fields.map(f => `${f} = ?`).join(', ');
+
+  db.run(`UPDATE requests SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...values, id]);
+  saveDb();
+
+  return queryOne('SELECT * FROM requests WHERE id = ?', [id]);
+};
+
+export const getRequestWithDetails = (id) => {
+  return queryOne(`
+    SELECT requests.*, 
+           leads.client_name, leads.company, leads.timezone, leads.source,
+           creator.name as creator_name, creator.email as creator_email,
+           presale.name as presale_name,
+           techlead.name as techlead_name
+    FROM requests
+    LEFT JOIN leads ON requests.lead_id = leads.id
+    LEFT JOIN users creator ON requests.created_by = creator.id
+    LEFT JOIN users presale ON requests.assigned_presale = presale.id
+    LEFT JOIN users techlead ON requests.assigned_techlead = techlead.id
+    WHERE requests.id = ?
+  `, [id]);
+};
+
+export const getRequestsByLead = (leadId) => {
+  return queryAll(`
+    SELECT requests.*, users.name as creator_name
+    FROM requests
+    LEFT JOIN users ON requests.created_by = users.id
+    WHERE requests.lead_id = ?
+    ORDER BY requests.created_at DESC
+  `, [leadId]);
+};
+
+export const getAllRequests = () => {
+  return queryAll(`
+    SELECT requests.*, leads.client_name, leads.company, users.name as creator_name
+    FROM requests
+    LEFT JOIN leads ON requests.lead_id = leads.id
+    LEFT JOIN users ON requests.created_by = users.id
+    ORDER BY requests.created_at DESC
+  `);
+};
+
+export const getRequestsByStatus = (status) => {
+  return queryAll(`
+    SELECT requests.*, leads.client_name, leads.company, users.name as creator_name
+    FROM requests
+    LEFT JOIN leads ON requests.lead_id = leads.id
+    LEFT JOIN users ON requests.created_by = users.id
+    WHERE requests.status = ?
+    ORDER BY requests.created_at DESC
+  `, [status]);
+};
+
+export const getRequestsByCreator = (userId) => {
+  return queryAll(`
+    SELECT requests.*, leads.client_name, leads.company, users.name as creator_name
+    FROM requests
+    LEFT JOIN leads ON requests.lead_id = leads.id
+    LEFT JOIN users ON requests.created_by = users.id
+    WHERE requests.created_by = ?
+    ORDER BY requests.created_at DESC
+  `, [userId]);
+};
+
+// Project helpers
+export const insertProject = (leadId, requestId = null, name = null) => {
+  db.run(
+    'INSERT INTO projects (lead_id, request_id, name, changelog) VALUES (?, ?, ?, ?)',
+    [leadId, requestId, name, JSON.stringify([{ date: new Date().toISOString(), action: 'Project created from request', user: 'System' }])]
+  );
+  saveDb();
   return queryOne('SELECT * FROM projects WHERE lead_id = ? ORDER BY id DESC LIMIT 1', [leadId]);
 };
 
@@ -514,18 +700,20 @@ export const getProjectWithDetails = (id) => {
   const project = queryOne(`
     SELECT projects.*, 
            pm.name as pm_name,
-           leads.client_name, leads.cooperation_model, leads.work_type, leads.tech_stack,
-           leads.hourly_rate, leads.budget, leads.timeframe, leads.deadline, leads.start_date,
-           leads.team_need, leads.english_level, leads.meetings, leads.timezone, leads.project_stage,
-           leads.intro_call_link, leads.presentation_link, leads.business_idea, leads.job_description,
-           leads.design_link, leads.project_overview, leads.estimate_id,
+           leads.client_name, leads.company, leads.timezone, leads.source,
+           requests.cooperation_model, requests.work_type, requests.tech_stack,
+           requests.hourly_rate, requests.budget, requests.timeframe, requests.deadline, requests.start_date,
+           requests.team_need, requests.english_level, requests.meetings, requests.project_stage,
+           requests.intro_call_link, requests.call_summary, requests.presentation_link, requests.business_idea,
+           requests.job_description, requests.design_link, requests.project_overview, requests.estimate_id,
            sale.name as sale_name,
            presale.name as presale_name
     FROM projects
     LEFT JOIN users pm ON projects.assigned_pm = pm.id
     LEFT JOIN leads ON projects.lead_id = leads.id
+    LEFT JOIN requests ON projects.request_id = requests.id
     LEFT JOIN users sale ON leads.created_by = sale.id
-    LEFT JOIN users presale ON leads.assigned_presale = presale.id
+    LEFT JOIN users presale ON requests.assigned_presale = presale.id
     WHERE projects.id = ?
   `, [id]);
 
@@ -561,7 +749,6 @@ export const getProjectsByLeadId = (leadId) => {
   return queryAll('SELECT * FROM projects WHERE lead_id = ? ORDER BY id DESC', [leadId]);
 };
 
-// Keep singular for backwards compat (returns first)
 export const getProjectByLeadId = (leadId) => {
   return queryOne('SELECT * FROM projects WHERE lead_id = ? ORDER BY id ASC', [leadId]);
 };

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { DEFAULT_MANUAL_ROLES, DEFAULT_SECTIONS, DEFAULT_TECH_STACK } from '../constants/defaults';
 import { useTotals } from '../hooks/useTotals';
 import { api } from '../services/api';
@@ -32,16 +33,30 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
 
     const [currentEstimateId, setCurrentEstimateId] = useState(estimateId);
     const [lead, setLead] = useState(null);
+    const [linkedRequest, setLinkedRequest] = useState(null);
 
     // Sync state if prop changes
     useEffect(() => {
         setCurrentEstimateId(estimateId);
     }, [estimateId]);
 
-    // Fetch associated lead
+    // Fetch associated lead & request
     useEffect(() => {
-        const fetchLead = async () => {
+        const fetchContextData = async () => {
             try {
+                // Fetch Request if context or estimate has it
+                let reqId = context?.requestId || context?.id;
+
+                if (!reqId && estimateId) {
+                    const est = await api.getEstimate(estimateId);
+                    if (est.request_id) reqId = est.request_id;
+                }
+
+                if (reqId) {
+                    const reqData = await api.getRequest(reqId);
+                    setLinkedRequest(reqData);
+                }
+
                 if (sourceLeadId) {
                     const data = await api.getLead(sourceLeadId);
                     setLead(data);
@@ -52,11 +67,11 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                     if (found) setLead(found);
                 }
             } catch (err) {
-                console.error('Failed to fetch lead:', err);
+                console.error('Failed to fetch context data:', err);
             }
         };
-        fetchLead();
-    }, [sourceLeadId, estimateId]);
+        fetchContextData();
+    }, [sourceLeadId, estimateId, context]);
 
     // Load initial data if provided (edit mode)
     useEffect(() => {
@@ -101,6 +116,19 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
 
         loadData();
     }, [initialData, estimateId]);
+
+    // Prefill from request context (when creating estimate from RequestDetail)
+    useEffect(() => {
+        if (context && !estimateId && !initialData) {
+            // context is a request object with project_name and client_name
+            if (context.project_name) {
+                setProjectName(context.project_name);
+            }
+            if (context.client_name) {
+                setClientName(context.client_name);
+            }
+        }
+    }, [context, estimateId, initialData]);
 
     // Recalculate totals
     const totals = useTotals(sections, manualRoles, qaPercent, pmPercent, qaRate, pmRate, discount);
@@ -280,7 +308,8 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
     const handleApprove = async () => {
         // Support both lead-based approval and request-based approval
         const canApproveLead = !!lead;
-        const canApproveRequest = !!(context?.requestId);
+        const requestId = context?.requestId || context?.id;
+        const canApproveRequest = !!requestId;
 
         if (!canApproveLead && !canApproveRequest) return;
 
@@ -300,10 +329,10 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
 
                 // If we have a request context, complete the request
                 if (canApproveRequest) {
-                    await api.completeEstimateRequest(context.requestId, id);
+                    await api.approveRequest(requestId, id);
                 }
 
-                alert(canApproveLead ? 'Estimation approved & lead updated!' : 'Estimate request completed!');
+                alert(canApproveLead ? 'Estimation approved & lead updated!' : 'Estimate request sent to Pre-Sale review!');
             }
         } catch (e) {
             console.error(e);
@@ -321,17 +350,30 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 projectName={projectName}
                 setProjectName={setProjectName}
                 clientName={clientName}
-                setClientName={setClientName}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                onPrintReport={handlePrint}
                 onSave={handleSave}
-                onApprove={(user?.role === 'TechLead' && (lead || context?.requestId)) ? handleApprove : undefined}
+                onApprove={((user?.role === 'TechLead' || user?.role === 'Admin') && (lead || context?.requestId) && currentEstimateId) ? handleApprove : undefined}
+                onPrint={handlePrint}
                 onBack={onBack}
                 saving={saving}
                 saveMessage={saveMessage}
-                user={user}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                approveLabel={(context?.requestId || context?.id) ? 'Send to PreSale Review' : 'Approve'}
             />
+
+            {linkedRequest?.rejection_reason && (user?.role === 'TechLead' || user?.role === 'Admin') && (
+                <div className="max-w-7xl mx-auto w-full px-6 mt-4">
+                    <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded-xl shadow-sm">
+                        <AlertTriangle size={20} className="text-red-500 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black text-red-500 uppercase tracking-widest mb-1">Reason for changes:</p>
+                            <p className="text-sm text-red-700 dark:text-red-400 font-medium whitespace-pre-wrap">
+                                {linkedRequest.rejection_reason}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <main className="flex-1 max-w-7xl w-full mx-auto p-6 overflow-auto">
                 {activeTab === 'estimation' && (

@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { calculateTotals } from '../hooks/useTotals';
 import { DEFAULT_MANUAL_ROLES, DEFAULT_SECTIONS } from '../constants/defaults';
 import LeadCard from '../components/leads/LeadCard';
+import RequestCard from '../components/requests/RequestCard';
 import ProjectCard from '../components/projects/ProjectCard';
 import {
     Plus,
@@ -23,16 +24,16 @@ import {
     MessageSquare
 } from 'lucide-react';
 
-const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOpenProject }) => {
+const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOpenRequest, onOpenProject }) => {
     const { user, logout, canCreate, canEdit, canDelete, canCreateLead, canViewLeads, canViewEstimates } = useAuth();
     const [estimates, setEstimates] = useState([]);
     const [leads, setLeads] = useState([]);
+    const [requests, setRequests] = useState([]);
     const [projects, setProjects] = useState([]);
     const [estimateRequests, setEstimateRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    // Determine default tab based on role
     const getDefaultTab = () => {
         if (user?.role === 'Sale') return 'leads';
         if (user?.role === 'TechLead') return 'pending';
@@ -51,23 +52,27 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
         try {
             setLoading(true);
 
-            // Load estimates if user can view them
             if (canViewEstimates()) {
                 const estimatesData = await api.getEstimates();
                 setEstimates(estimatesData);
             }
 
-            // Load leads
             const leadsData = await api.getLeads();
             setLeads(leadsData);
 
-            // Load projects for PM/Admin
+            // Load requests for workflow tabs
+            try {
+                const requestsData = await api.getRequests();
+                setRequests(requestsData);
+            } catch (err) {
+                console.error('Failed to load requests:', err);
+            }
+
             if (user?.role === 'PM' || user?.role === 'Admin') {
                 const projectsData = await api.getProjects();
                 setProjects(projectsData);
             }
 
-            // Load estimate requests for TechLead/Admin
             if (user?.role === 'TechLead' || user?.role === 'Admin') {
                 try {
                     const requestsData = await api.getEstimateRequests();
@@ -110,26 +115,36 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
         Sale: 'bg-cyan-100 text-cyan-700'
     };
 
-    // Filter leads by status
-    const pendingLeads = leads.filter(l => l.status === 'Pending Estimation');
-    const pendingReviewLeads = leads.filter(l => l.status === 'Pending Review');
+    // Filter requests by status (new workflow uses Requests, not Leads)
+    const pendingEstimationRequests = requests.filter(r => r.status === 'Pending Estimation');
+    const pendingReviewRequests = requests.filter(r => r.status === 'Pending Review');
+    const reviewingRequests = requests.filter(r => r.status === 'Reviewing');
+    const presaleReviewRequests = requests.filter(r => r.status === 'PreSale Review');
+    const saleReviewRequests = requests.filter(r => r.status === 'Sale Review');
+    const rejectedRequests = requests.filter(r => r.status === 'Rejected' && r.created_by === user?.id);
     const myLeads = leads.filter(l => l.created_by === user?.id);
 
-    // Define tabs based on role
     const getTabs = () => {
         const tabs = [];
 
         if (user?.role === 'Sale') {
             tabs.push({ id: 'leads', label: 'My Leads', icon: Briefcase, count: myLeads.length });
-        } else if (user?.role === 'PreSale' || user?.role === 'Admin') {
+            tabs.push({ id: 'rejected', label: 'Rejected', icon: AlertCircle, count: rejectedRequests.length });
+            tabs.push({ id: 'sale-review', label: 'Pending Approval', icon: FileText, count: saleReviewRequests.length });
+        } else if (user?.role === 'PreSale') {
+            tabs.push({ id: 'pending-review', label: 'Pending Review', icon: FileText, count: pendingReviewRequests.length });
+            tabs.push({ id: 'reviewing', label: 'Reviewing', icon: Clock, count: reviewingRequests.length });
+            tabs.push({ id: 'presale-review', label: 'Estimate Review', icon: Layers, count: presaleReviewRequests.length });
+            tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
+        } else if (user?.role === 'Admin') {
             tabs.push({ id: 'leads', label: 'All Leads', icon: Briefcase, count: leads.length });
-            tabs.push({ id: 'pending-review', label: 'Pending Review', icon: FileText, count: pendingReviewLeads.length });
-            tabs.push({ id: 'pending', label: 'Pending Estimation', icon: Clock, count: pendingLeads.length });
+            tabs.push({ id: 'pending-review', label: 'Pending Review', icon: FileText, count: pendingReviewRequests.length });
+            tabs.push({ id: 'pending', label: 'Pending Estimation', icon: Clock, count: pendingEstimationRequests.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'TechLead') {
-            tabs.push({ id: 'requests', label: 'Estimate Requests', icon: MessageSquare, count: estimateRequests.length });
-            tabs.push({ id: 'pending', label: 'Pending Estimation', icon: Clock, count: pendingLeads.length });
-            tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
+            tabs.push({ id: 'project-requests', label: 'Pending Estimation from PM', icon: MessageSquare, count: estimateRequests.length });
+            tabs.push({ id: 'pending', label: 'Pending Estimation from Pre-Sale', icon: Clock, count: pendingEstimationRequests.length });
+            tabs.push({ id: 'estimates', label: 'My Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'PM') {
             tabs.push({ id: 'projects', label: 'Projects', icon: FolderKanban, count: projects.length });
             tabs.push({ id: 'leads', label: 'All Leads', icon: Briefcase, count: leads.length });
@@ -186,8 +201,8 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                         <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{leads.length}</div>
                     </div>
                     <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
-                        <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Pending</div>
-                        <div className="text-2xl font-black text-orange-600 dark:text-orange-400">{pendingLeads.length}</div>
+                        <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Pending Requests</div>
+                        <div className="text-2xl font-black text-orange-600 dark:text-orange-400">{pendingEstimationRequests.length}</div>
                     </div>
                     <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-200">
                         <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Estimates</div>
@@ -232,6 +247,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                         {activeTab === 'pending-review' && 'Pending Review'}
                         {activeTab === 'estimates' && 'Project Estimates'}
                         {activeTab === 'projects' && 'Projects'}
+                        {activeTab === 'project-requests' && 'Project Estimate Requests'}
                     </h2>
                     <div className="flex gap-2">
                         {activeTab === 'leads' && canCreateLead() && (
@@ -303,25 +319,24 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                             </>
                         )}
 
-                        {/* Pending Review Tab */}
+                        {/* Pending Review Tab (Requests) */}
                         {activeTab === 'pending-review' && (
                             <>
-                                {pendingReviewLeads.length === 0 ? (
+                                {pendingReviewRequests.length === 0 ? (
                                     <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                                         <FileText size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No leads pending review</h3>
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No requests pending review</h3>
                                         <p className="text-slate-400 dark:text-slate-500 text-sm">
-                                            Good job! All leads have been reviewed.
+                                            Good job! All requests have been reviewed.
                                         </p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {pendingReviewLeads.map(lead => (
-                                            <LeadCard
-                                                key={lead.id}
-                                                lead={lead}
-                                                onOpen={onOpenLead}
-                                                onDelete={handleLeadDelete}
+                                        {pendingReviewRequests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
                                             />
                                         ))}
                                     </div>
@@ -329,8 +344,8 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                             </>
                         )}
 
-                        {/* Estimate Requests Tab */}
-                        {activeTab === 'requests' && (
+                        {/* Project Estimate Requests Tab (for TechLead) */}
+                        {activeTab === 'project-requests' && (
                             <>
                                 {estimateRequests.length === 0 ? (
                                     <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -376,10 +391,10 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                             </>
                         )}
 
-                        {/* Pending Estimation Tab */}
+                        {/* Pending Estimation Tab (Requests) */}
                         {activeTab === 'pending' && (
                             <>
-                                {pendingLeads.length === 0 ? (
+                                {pendingEstimationRequests.length === 0 ? (
                                     <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                                         <Clock size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
                                         <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No pending estimations</h3>
@@ -389,12 +404,111 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {pendingLeads.map(lead => (
-                                            <LeadCard
-                                                key={lead.id}
-                                                lead={lead}
-                                                onOpen={onOpenLead}
-                                                onDelete={handleLeadDelete}
+                                        {pendingEstimationRequests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Rejected Tab (for Sale) */}
+                        {activeTab === 'rejected' && (
+                            <>
+                                {rejectedRequests.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <AlertCircle size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No rejected requests</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            All your requests are in good shape!
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {rejectedRequests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Sale Review Tab */}
+                        {activeTab === 'sale-review' && (
+                            <>
+                                {saleReviewRequests.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <FileText size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No pending approvals</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            No estimates awaiting your approval.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {saleReviewRequests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Reviewing Tab (for PreSale) */}
+                        {activeTab === 'reviewing' && (
+                            <>
+                                {reviewingRequests.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <Clock size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No requests being reviewed</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            Start reviewing from the Pending Review tab.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {reviewingRequests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* PreSale Estimate Review Tab */}
+                        {activeTab === 'presale-review' && (
+                            <>
+                                {presaleReviewRequests.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <Layers size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No estimates to review</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            TechLead will send estimates for your review.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {presaleReviewRequests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
                                             />
                                         ))}
                                     </div>
@@ -482,10 +596,10 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
 
                                                     <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between mt-auto">
                                                         <button
-                                                            onClick={() => onOpenEstimate(estimate.id)}
+                                                            onClick={() => onOpenEstimate(estimate.id, estimate.request_id ? { id: estimate.request_id } : null)}
                                                             className="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                                                         >
-                                                            {canEdit(estimate.created_by) ? 'Open & Edit' : 'View'}
+                                                            Open Estimate
                                                         </button>
 
                                                         {canDelete(estimate.created_by) && (
@@ -513,7 +627,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                         <FolderKanban size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
                                         <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No projects yet</h3>
                                         <p className="text-slate-400 dark:text-slate-500 text-sm">
-                                            Projects will appear here when leads are converted to contracts.
+                                            Projects will appear here when requests are converted to contracts.
                                         </p>
                                     </div>
                                 ) : (

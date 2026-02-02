@@ -92,14 +92,16 @@ router.get('/:id', authenticateToken, (req, res) => {
             return res.status(404).json({ error: 'Estimate not found' });
         }
 
-        // TechLead can only view their own
+        // TechLead can only view their own, PreSale and Sale can view all
         if (role === 'TechLead' && estimate.created_by !== userId) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
+        const editHistory = estimate.edit_history ? JSON.parse(estimate.edit_history) : [];
         res.json({
             ...estimate,
-            data: JSON.parse(estimate.data)
+            data: JSON.parse(estimate.data),
+            edit_history: editHistory
         });
     } catch (error) {
         console.error('Get estimate error:', error);
@@ -110,22 +112,36 @@ router.get('/:id', authenticateToken, (req, res) => {
 // POST /api/estimates - Create new estimate
 router.post('/', authenticateToken, canModifyEstimate, (req, res) => {
     try {
-        const { name, data, project_id } = req.body;
-        const { id: userId } = req.user;
+        const { name, data, project_id, request_id } = req.body;
+        const { id: userId, name: userName } = req.user;
 
         if (!name || !data) {
             return res.status(400).json({ error: 'Name and data required' });
         }
 
-        const estimate = insertEstimate(name, userId, JSON.stringify(data), project_id || null);
+        // Create initial edit history entry
+        const initialHistory = [{
+            action: 'created',
+            user_id: userId,
+            user_name: userName,
+            timestamp: new Date().toISOString()
+        }];
+
+        const estimate = insertEstimate(name, userId, JSON.stringify(data), project_id || null, request_id || null, JSON.stringify(initialHistory));
 
         if (!estimate) {
             return res.status(500).json({ error: 'Failed to create estimate' });
         }
 
+        // If request_id provided, link it back
+        if (request_id) {
+            run('UPDATE requests SET estimate_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [estimate.id, request_id]);
+        }
+
         res.status(201).json({
             ...estimate,
-            data: JSON.parse(estimate.data)
+            data: JSON.parse(estimate.data),
+            edit_history: initialHistory
         });
     } catch (error) {
         console.error('Create estimate error:', error);
@@ -138,28 +154,41 @@ router.put('/:id', authenticateToken, canModifyEstimate, (req, res) => {
     try {
         const { id } = req.params;
         const { name, data } = req.body;
-        const { role, id: userId } = req.user;
+        const { role, id: userId, name: userName } = req.user;
 
         const existing = queryOne('SELECT * FROM estimates WHERE id = ?', [id]);
         if (!existing) {
             return res.status(404).json({ error: 'Estimate not found' });
         }
 
-        // Check ownership for non-admin
-        if (role !== 'Admin' && existing.created_by !== userId) {
+        // TechLead can only edit their own, PreSale and Admin can edit any
+        if (role === 'TechLead' && existing.created_by !== userId) {
             return res.status(403).json({ error: 'Can only modify your own estimates' });
         }
+        if (role !== 'Admin' && role !== 'TechLead' && role !== 'PreSale') {
+            return res.status(403).json({ error: 'Not authorized to modify estimates' });
+        }
+
+        // Update edit history
+        const editHistory = existing.edit_history ? JSON.parse(existing.edit_history) : [];
+        editHistory.push({
+            action: 'updated',
+            user_id: userId,
+            user_name: userName,
+            timestamp: new Date().toISOString()
+        });
 
         run(`
       UPDATE estimates 
-      SET name = ?, data = ?, updated_at = datetime('now')
+      SET name = ?, data = ?, edit_history = ?, updated_at = datetime('now')
       WHERE id = ?
-    `, [name || existing.name, JSON.stringify(data), id]);
+    `, [name || existing.name, JSON.stringify(data), JSON.stringify(editHistory), id]);
 
         const updated = queryOne('SELECT * FROM estimates WHERE id = ?', [id]);
         res.json({
             ...updated,
-            data: JSON.parse(updated.data)
+            data: JSON.parse(updated.data),
+            edit_history: editHistory
         });
     } catch (error) {
         console.error('Update estimate error:', error);

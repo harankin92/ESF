@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import estimatesRoutes from './routes/estimates.js';
 import publicRoutes from './routes/public.js';
 import leadsRoutes from './routes/leads.js';
+import requestsRoutes from './routes/requests.js';
 import projectsRoutes from './routes/projects.js';
 import estimateRequestsRoutes from './routes/estimate-requests.js';
 
@@ -23,6 +24,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/estimates', estimatesRoutes);
 app.use('/api/shared', publicRoutes);
 app.use('/api/leads', leadsRoutes);
+app.use('/api/requests', requestsRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/estimate-requests', estimateRequestsRoutes);
 
@@ -37,45 +39,38 @@ initDb().then(() => {
         console.log(`
   🚀 ESF Server running on http://localhost:${PORT}
   
-  API Endpoints:
-  - POST /api/auth/login     - Login
-  - GET  /api/auth/me        - Current user
-  - GET  /api/estimates      - List estimates
-  - POST /api/estimates      - Create estimate
-  - GET  /api/estimates/:id  - Get estimate
-  - PUT  /api/estimates/:id  - Update estimate
-  - DELETE /api/estimates/:id - Delete estimate
-  - POST /api/estimates/:id/share - Generate share link
-  - GET  /api/shared/:uuid   - Get shared estimate (Public)
-  
-  Lead Endpoints:
+  Lead Endpoints (basic client info):
   - GET  /api/leads          - List leads
   - POST /api/leads          - Create lead (Sale)
-  - GET  /api/leads/:id      - Get lead
+  - GET  /api/leads/:id      - Get lead with requests
   - PUT  /api/leads/:id      - Update lead
-  - PUT  /api/leads/:id/overview - Add project overview (PreSale)
-  - PUT  /api/leads/:id/review   - Start reviewing (PreSale)
-  - PUT  /api/leads/:id/approve  - Approve with estimate (TechLead)
-  - PUT  /api/leads/:id/reject   - Reject lead (Sale)
-  - PUT  /api/leads/:id/contract - Convert to contract (Sale)
   - DELETE /api/leads/:id    - Delete lead
+  
+  Request Endpoints (project details, 1 Lead -> N Requests):
+  - GET  /api/requests          - List requests
+  - POST /api/requests          - Create request (Sale)
+  - GET  /api/requests/:id      - Get request
+  - PUT  /api/requests/:id      - Update request
+  - GET  /api/requests/by-lead/:leadId - Get requests for lead
+  - PUT  /api/requests/:id/send-to-review - Send to PreSale (Sale)
+  - PUT  /api/requests/:id/review   - Start reviewing (PreSale)
+  - PUT  /api/requests/:id/overview - Add overview (PreSale)
+  - PUT  /api/requests/:id/approve  - Approve (TechLead)
+  - PUT  /api/requests/:id/reject   - Reject (Sale)
+  - PUT  /api/requests/:id/contract - Convert to project (Sale)
+  - DELETE /api/requests/:id    - Delete request
   
   Project Endpoints:
   - GET  /api/projects       - List projects
   - GET  /api/projects/:id   - Get project details
   - PUT  /api/projects/:id   - Update project
-  - PUT  /api/projects/:id/status - Change status
-  - PUT  /api/projects/:id/credentials - Update credentials
-  - PUT  /api/projects/:id/documentation - Update docs
-  - PUT  /api/projects/:id/changelog - Add changelog entry
-  - PUT  /api/projects/:id/invoices - Update invoices
-  - GET  /api/projects/:id/estimates - List project estimates
-  - GET  /api/projects/:id/requests  - List estimate requests
   
-  Estimate Request Endpoints:
-  - GET  /api/estimate-requests     - List pending (TechLead)
-  - POST /api/estimate-requests     - Create request (PM)
-  - PUT  /api/estimate-requests/:id/complete - Complete with estimate
+  Estimate Endpoints:
+  - GET  /api/estimates      - List estimates
+  - POST /api/estimates      - Create estimate
+  - GET  /api/estimates/:id  - Get estimate
+  - PUT  /api/estimates/:id  - Update estimate
+  - DELETE /api/estimates/:id - Delete estimate
   
   Test Users:
   - admin@test.com / admin123 (Admin)

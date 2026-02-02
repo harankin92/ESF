@@ -8,16 +8,20 @@ import Estimator from './pages/EstimatorOld';
 import SharedReport from './pages/SharedReport';
 import LeadForm from './pages/LeadForm';
 import LeadDetail from './pages/LeadDetail';
+import RequestForm from './pages/RequestForm';
+import RequestDetail from './pages/RequestDetail';
 import ProjectDetail from './pages/ProjectDetail';
 
 const AppContent = () => {
     const { user, loading } = useAuth();
-    const [view, setView] = useState('dashboard'); // 'dashboard' | 'estimator' | 'lead-form' | 'lead-detail' | 'project-detail'
+    const [view, setView] = useState('dashboard');
     const [currentEstimateId, setCurrentEstimateId] = useState(null);
     const [currentLeadId, setCurrentLeadId] = useState(null);
+    const [currentRequestId, setCurrentRequestId] = useState(null);
     const [currentProjectId, setCurrentProjectId] = useState(null);
     const [leadToEdit, setLeadToEdit] = useState(null);
-    const [sourceLeadId, setSourceLeadId] = useState(null);
+    const [requestToEdit, setRequestToEdit] = useState(null);
+    const [requestLeadId, setRequestLeadId] = useState(null);
     const [estimateContext, setEstimateContext] = useState(null);
 
     if (loading) {
@@ -32,28 +36,28 @@ const AppContent = () => {
         return <Login />;
     }
 
-    const handleOpenEstimate = (id) => {
+    const handleOpenEstimate = (id, context = null) => {
         setCurrentEstimateId(id);
-        setSourceLeadId(null);
-        setEstimateContext(null);
+        if (context) {
+            setEstimateContext({
+                requestId: context.id,
+                project_name: context.project_name,
+                client_name: context.client_name
+            });
+        } else {
+            setEstimateContext(null);
+        }
         setView('estimator');
     };
 
     const handleCreateNew = (arg = null) => {
         setCurrentEstimateId(null);
 
-        // Handle argument types: context object vs lead ID vs event/null
         if (arg && typeof arg === 'object' && !arg.nativeEvent) {
-            // It's a context object { requestId, projectId, leadId }
             setEstimateContext(arg);
-            setSourceLeadId(arg.leadId || null);
         } else if (['string', 'number'].includes(typeof arg)) {
-            // It's a lead ID (primitive)
-            setSourceLeadId(arg);
-            setEstimateContext({ leadId: arg });
+            setEstimateContext({ requestId: arg });
         } else {
-            // Event or null
-            setSourceLeadId(null);
             setEstimateContext(null);
         }
 
@@ -64,9 +68,18 @@ const AppContent = () => {
         setView('dashboard');
         setCurrentEstimateId(null);
         setCurrentLeadId(null);
+        setCurrentRequestId(null);
         setCurrentProjectId(null);
         setLeadToEdit(null);
+        setRequestToEdit(null);
+        setRequestLeadId(null);
         setEstimateContext(null);
+    };
+
+    const handleBackToLead = () => {
+        setView('lead-detail');
+        setCurrentRequestId(null);
+        setRequestToEdit(null);
     };
 
     const handleOpenLead = (id) => {
@@ -94,6 +107,24 @@ const AppContent = () => {
         }
     };
 
+    // Request handlers
+    const handleOpenRequest = (id) => {
+        setCurrentRequestId(id);
+        setView('request-detail');
+    };
+
+    const handleCreateRequest = (leadId) => {
+        setRequestLeadId(leadId);
+        setRequestToEdit(null);
+        setView('request-form');
+    };
+
+    const handleEditRequest = (request) => {
+        setRequestToEdit(request);
+        setRequestLeadId(request.lead_id);
+        setView('request-form');
+    };
+
     const handleOpenProject = (id) => {
         setCurrentProjectId(id);
         setView('project-detail');
@@ -116,10 +147,35 @@ const AppContent = () => {
             <LeadDetail
                 leadId={currentLeadId}
                 onBack={handleBack}
-                onOpenEstimate={handleOpenEstimate}
-                onCreateEstimate={handleCreateNew}
+                onOpenRequest={handleOpenRequest}
+                onCreateRequest={handleCreateRequest}
                 onEdit={handleEditLead}
                 onDelete={handleDeleteLead}
+            />
+        );
+    }
+
+    // Request Form
+    if (view === 'request-form') {
+        return (
+            <RequestForm
+                leadId={requestLeadId}
+                onBack={currentLeadId ? handleBackToLead : handleBack}
+                onSuccess={() => currentLeadId ? setView('lead-detail') : setView('dashboard')}
+                initialData={requestToEdit}
+            />
+        );
+    }
+
+    // Request Detail
+    if (view === 'request-detail') {
+        return (
+            <RequestDetail
+                requestId={currentRequestId}
+                onBack={handleBack}
+                onOpenEstimate={handleOpenEstimate}
+                onCreateEstimate={handleCreateNew}
+                onEdit={handleEditRequest}
             />
         );
     }
@@ -141,7 +197,6 @@ const AppContent = () => {
             <Estimator
                 user={user}
                 estimateId={currentEstimateId}
-                sourceLeadId={sourceLeadId}
                 context={estimateContext}
                 onBack={handleBack}
                 onSaved={() => { }}
@@ -156,13 +211,13 @@ const AppContent = () => {
             onCreateNew={handleCreateNew}
             onOpenLead={handleOpenLead}
             onCreateLead={handleCreateLead}
+            onOpenRequest={handleOpenRequest}
             onOpenProject={handleOpenProject}
         />
     );
 };
 
 const App = () => {
-    // Check for public share route
     const path = window.location.pathname;
     if (path.startsWith('/share/')) {
         const parts = path.split('/share/');

@@ -96,26 +96,17 @@ export const api = {
     },
 
     async getSharedEstimate(uuid) {
-        // Public endpoint, no auth headers
         const res = await fetch(`${API_URL}/shared/${uuid}`);
         if (!res.ok) throw new Error('Failed to load shared estimate');
         return res.json();
     },
 
-    // Leads
+    // Leads (basic client info)
     async getLeads() {
         const res = await fetch(`${API_URL}/leads`, {
             headers: authHeaders()
         });
         if (!res.ok) throw new Error('Failed to fetch leads');
-        return res.json();
-    },
-
-    async getPendingLeads() {
-        const res = await fetch(`${API_URL}/leads/pending`, {
-            headers: authHeaders()
-        });
-        if (!res.ok) throw new Error('Failed to fetch pending leads');
         return res.json();
     },
 
@@ -153,44 +144,6 @@ export const api = {
         return res.json();
     },
 
-    async addProjectOverview(id, project_overview) {
-        const res = await fetch(`${API_URL}/leads/${id}/overview`, {
-            method: 'PUT',
-            headers: authHeaders(),
-            body: JSON.stringify({ project_overview })
-        });
-        if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error || 'Failed to add overview');
-        }
-        return res.json();
-    },
-
-    async startReviewLead(id) {
-        const res = await fetch(`${API_URL}/leads/${id}/review`, {
-            method: 'PUT',
-            headers: authHeaders()
-        });
-        if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error || 'Failed to start review');
-        }
-        return res.json();
-    },
-
-    async approveLead(id, estimate_id) {
-        const res = await fetch(`${API_URL}/leads/${id}/approve`, {
-            method: 'PUT',
-            headers: authHeaders(),
-            body: JSON.stringify({ estimate_id })
-        });
-        if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error || 'Failed to approve lead');
-        }
-        return res.json();
-    },
-
     async deleteLead(id) {
         const res = await fetch(`${API_URL}/leads/${id}`, {
             method: 'DELETE',
@@ -203,27 +156,230 @@ export const api = {
         return res.json();
     },
 
-    async rejectLead(id, reason) {
-        const res = await fetch(`${API_URL}/leads/${id}/reject`, {
-            method: 'PUT',
+    // Requests (project details, 1 Lead -> N Requests)
+    async getRequests() {
+        const res = await fetch(`${API_URL}/requests`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch requests');
+        return res.json();
+    },
+
+    async getRequestsByLead(leadId) {
+        const res = await fetch(`${API_URL}/requests/by-lead/${leadId}`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch requests');
+        return res.json();
+    },
+
+    async getPendingRequests() {
+        const res = await fetch(`${API_URL}/requests/pending`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch pending requests');
+        return res.json();
+    },
+
+    async getRequest(id) {
+        const res = await fetch(`${API_URL}/requests/${id}`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch request');
+        return res.json();
+    },
+
+    async createRequest(data) {
+        const res = await fetch(`${API_URL}/requests`, {
+            method: 'POST',
             headers: authHeaders(),
-            body: JSON.stringify({ reason })
+            body: JSON.stringify(data)
         });
         if (!res.ok) {
             const error = await res.json();
-            throw new Error(error.error || 'Failed to reject lead');
+            throw new Error(error.error || 'Failed to create request');
         }
         return res.json();
     },
 
-    async convertToContract(id) {
-        const res = await fetch(`${API_URL}/leads/${id}/contract`, {
+    async updateRequest(id, data) {
+        const res = await fetch(`${API_URL}/requests/${id}`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update request');
+        }
+        return res.json();
+    },
+
+    async sendRequestToReview(id) {
+        const res = await fetch(`${API_URL}/requests/${id}/send-to-review`, {
             method: 'PUT',
             headers: authHeaders()
         });
         if (!res.ok) {
             const error = await res.json();
+            throw new Error(error.error || 'Failed to send to review');
+        }
+        return res.json();
+    },
+
+    async startReviewRequest(id) {
+        const res = await fetch(`${API_URL}/requests/${id}/review`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to start review');
+        }
+        return res.json();
+    },
+
+    async addRequestOverview(id, project_overview) {
+        const res = await fetch(`${API_URL}/requests/${id}/overview`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ project_overview })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to add overview');
+        }
+        return res.json();
+    },
+
+    async approveRequest(id, estimate_id) {
+        const res = await fetch(`${API_URL}/requests/${id}/approve`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ estimate_id })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to approve request');
+        }
+        return res.json();
+    },
+
+    async rejectRequest(id, rejection_reason) {
+        const res = await fetch(`${API_URL}/requests/${id}/reject`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ rejection_reason })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to reject request');
+        }
+        return res.json();
+    },
+
+    // PreSale rejects request (needs more info from Sale)
+    async presaleRejectRequest(id, rejection_reason) {
+        const res = await fetch(`${API_URL}/requests/${id}/presale-reject`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ rejection_reason })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to reject request');
+        }
+        return res.json();
+    },
+
+    // PreSale sends to TechLead for estimation
+    async sendToEstimation(id) {
+        const res = await fetch(`${API_URL}/requests/${id}/send-to-estimation`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to send to estimation');
+        }
+        return res.json();
+    },
+
+    // PreSale approves estimate -> Sale Review
+    async presaleApproveEstimate(id) {
+        const res = await fetch(`${API_URL}/requests/${id}/presale-approve`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to approve');
+        }
+        return res.json();
+    },
+
+    // PreSale rejects estimate -> back to TechLead
+    async presaleRejectEstimate(id, rejection_reason) {
+        const res = await fetch(`${API_URL}/requests/${id}/presale-reject-estimate`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ rejection_reason })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to reject estimate');
+        }
+        return res.json();
+    },
+
+    // Sale accepts final estimate
+    async saleAcceptEstimate(id) {
+        const res = await fetch(`${API_URL}/requests/${id}/sale-accept`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to accept');
+        }
+        return res.json();
+    },
+
+    // Sale requests edit -> back to TechLead
+    async saleRequestEdit(id, rejection_reason) {
+        const res = await fetch(`${API_URL}/requests/${id}/sale-request-edit`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ rejection_reason })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to request edit');
+        }
+        return res.json();
+    },
+
+    async convertRequestToContract(id, project_name = null) {
+        const res = await fetch(`${API_URL}/requests/${id}/contract`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ project_name })
+        });
+        if (!res.ok) {
+            const error = await res.json();
             throw new Error(error.error || 'Failed to convert to contract');
+        }
+        return res.json();
+    },
+
+    async deleteRequest(id) {
+        const res = await fetch(`${API_URL}/requests/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to delete request');
         }
         return res.json();
     },
@@ -323,7 +479,7 @@ export const api = {
         return res.json();
     },
 
-    // Estimate Requests
+    // Estimate Requests (for projects)
     async getEstimateRequests() {
         const res = await fetch(`${API_URL}/estimate-requests`, {
             headers: authHeaders()

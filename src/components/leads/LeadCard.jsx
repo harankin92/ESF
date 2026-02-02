@@ -1,33 +1,53 @@
-import { Clock, User, DollarSign, Calendar, ArrowRight, Trash2 } from 'lucide-react';
+import { User, Calendar, ArrowRight, Trash2, MapPin, FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const statusColors = {
-    'New': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    'Pending Review': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-    'Reviewing': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-    'Pending Estimation': 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-    'Estimated': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+const sourceColors = {
+    'Upwork': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    'LinkedIn': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    'Website': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    'Referral': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    'Other': 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
 };
 
 const LeadCard = ({ lead, onOpen, onDelete }) => {
-    const { canEditLead } = useAuth();
+    const { user } = useAuth();
+
+    const canEdit = () => {
+        if (user?.role === 'Admin') return true;
+        if (user?.role === 'Sale' && lead.created_by === user?.id) return true;
+        return false;
+    };
+
     return (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden hover:shadow-md dark:hover:border-slate-700 transition-all group flex flex-col">
             <div className="p-6 flex-1">
-                {/* Status Badge */}
+                {/* Source Badge & ID */}
                 <div className="flex items-center justify-between mb-3">
-                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${statusColors[lead.status] || statusColors['New']}`}>
-                        {lead.status}
-                    </span>
+                    {lead.source ? (
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${sourceColors[lead.source] || sourceColors['Other']}`}>
+                            {lead.source}
+                        </span>
+                    ) : (
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                            No Source
+                        </span>
+                    )}
                     <span className="text-[10px] text-slate-400 dark:text-slate-500">
                         #{lead.id}
                     </span>
                 </div>
 
                 {/* Client Name */}
-                <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-2 truncate" title={lead.client_name}>
+                <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-1 truncate" title={lead.client_name}>
                     {lead.client_name}
                 </h3>
+
+                {/* Company */}
+                {lead.company && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-3 truncate">
+                        {lead.company}
+                    </p>
+                )}
 
                 {/* Meta Info */}
                 <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 mb-4">
@@ -40,30 +60,20 @@ const LeadCard = ({ lead, onOpen, onDelete }) => {
 
                 {/* Key Info Grid */}
                 <div className="grid grid-cols-2 gap-2">
-                    {lead.budget && (
-                        <div className="bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg p-2.5 text-center">
-                            <div className="text-[9px] uppercase text-emerald-400 dark:text-emerald-500 font-black mb-0.5">Budget</div>
-                            <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400 truncate">
-                                {lead.budget}
-                            </div>
-                        </div>
-                    )}
-                    {lead.deadline && (
+                    {lead.timezone && (
                         <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5 text-center">
-                            <div className="text-[9px] uppercase text-slate-400 dark:text-slate-500 font-black mb-0.5">Deadline</div>
+                            <div className="text-[9px] uppercase text-slate-400 dark:text-slate-500 font-black mb-0.5">Timezone</div>
                             <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">
-                                {new Date(lead.deadline).toLocaleDateString()}
+                                {lead.timezone}
                             </div>
                         </div>
                     )}
-                    {lead.work_type && (
-                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2.5 text-center col-span-2">
-                            <div className="text-[9px] uppercase text-slate-400 dark:text-slate-500 font-black mb-0.5">Work Type</div>
-                            <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">
-                                {lead.work_type}
-                            </div>
+                    <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-2.5 text-center">
+                        <div className="text-[9px] uppercase text-indigo-400 dark:text-indigo-500 font-black mb-0.5">Requests</div>
+                        <div className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                            {lead.request_count || 0}
                         </div>
-                    )}
+                    </div>
                 </div>
             </div>
 
@@ -77,7 +87,7 @@ const LeadCard = ({ lead, onOpen, onDelete }) => {
                     <ArrowRight size={14} />
                 </button>
 
-                {onDelete && canEditLead(lead) && (
+                {onDelete && canEdit() && (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();

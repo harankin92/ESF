@@ -14,6 +14,7 @@ const Header = ({
     onBack,
     saving,
     saveMessage,
+    approveLabel = 'Approve',
     showSave = true,
     user
 }) => {
@@ -99,7 +100,7 @@ const Header = ({
                             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-emerald-100 dark:shadow-none transition-all"
                         >
                             <CheckCircle size={18} />
-                            <span className="font-semibold">Approve</span>
+                            <span className="font-semibold">{approveLabel}</span>
                         </button>
                     )}
 

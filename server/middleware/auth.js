@@ -26,6 +26,7 @@ export const authorize = (...allowedRoles) => {
             return res.status(401).json({ error: 'Not authenticated' });
         }
         if (!allowedRoles.includes(req.user.role)) {
+            console.log(`Debug Authorization Failed: User Role [${req.user.role}], Required [${allowedRoles.join(', ')}]`);
             return res.status(403).json({ error: 'Insufficient permissions' });
         }
         next();
