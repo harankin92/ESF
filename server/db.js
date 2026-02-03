@@ -585,20 +585,50 @@ export const initDb = async () => {
     )
   `);
 
-  // Notifications table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('status_change', 'mention', 'comment', 'assignment')),
-      entity_type TEXT NOT NULL CHECK(entity_type IN ('request', 'estimate')),
-      entity_id INTEGER NOT NULL,
-      message TEXT NOT NULL,
-      read BOOLEAN DEFAULT 0,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    )
-  `);
+  // Migration: Update notifications table CHECK constraint if needed
+  try {
+    const tableSql = db.exec("SELECT sql FROM sqlite_master WHERE name='notifications'")[0].values[0][0];
+    if (!tableSql.includes('estimate_request')) {
+      console.log('Updating notifications table CHECK constraint...');
+
+      db.run("BEGIN TRANSACTION");
+
+      // 1. Rename old table
+      db.run("ALTER TABLE notifications RENAME TO notifications_old_constraint");
+
+      // 2. Create new table with correct constraint
+      db.run(`
+        CREATE TABLE notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          type TEXT NOT NULL CHECK(type IN ('status_change', 'mention', 'comment', 'assignment')),
+          entity_type TEXT NOT NULL CHECK(entity_type IN ('request', 'estimate', 'estimate_request')),
+          entity_id INTEGER NOT NULL,
+          message TEXT NOT NULL,
+          read BOOLEAN DEFAULT 0,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `);
+
+      // 3. Copy data
+      db.run(`
+        INSERT INTO notifications(id, user_id, type, entity_type, entity_id, message, read, created_at)
+        SELECT id, user_id, type, entity_type, entity_id, message, read, created_at
+        FROM notifications_old_constraint
+      `);
+
+      // 4. Drop old table
+      db.run("DROP TABLE notifications_old_constraint");
+
+      db.run("COMMIT");
+      saveDb();
+      console.log('✓ Successfully updated notifications table CHECK constraint');
+    }
+  } catch (err) {
+    console.log('Migration note (notifications constraint):', err.message);
+    try { db.run("ROLLBACK"); } catch (e) { }
+  }
 
   // Request Files table
   db.run(`
