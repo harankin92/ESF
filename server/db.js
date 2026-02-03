@@ -115,6 +115,51 @@ export const initDb = async () => {
     )
     `);
 
+  // Migration: Update users table CHECK constraint if needed
+  try {
+    const tableInfo = db.exec("SELECT sql FROM sqlite_master WHERE name='users'")[0];
+    if (tableInfo && tableInfo.values && tableInfo.values[0]) {
+      const tableSql = tableInfo.values[0][0];
+      if (!tableSql.includes("'Sale'")) {
+        console.log('Updating users table CHECK constraint...');
+
+        db.run("BEGIN TRANSACTION");
+
+        // 1. Rename old table
+        db.run("ALTER TABLE users RENAME TO users_old_constraint");
+
+        // 2. Create new table with correct constraint
+        db.run(`
+          CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('Admin', 'PreSale', 'TechLead', 'PM', 'Sale')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        // 3. Copy data
+        db.run(`
+          INSERT INTO users (id, email, password, name, role, created_at)
+          SELECT id, email, password, name, role, created_at
+          FROM users_old_constraint
+        `);
+
+        // 4. Drop old table
+        db.run("DROP TABLE users_old_constraint");
+
+        db.run("COMMIT");
+        saveDb();
+        console.log('✓ Successfully updated users table CHECK constraint');
+      }
+    }
+  } catch (err) {
+    console.log('Migration note (users constraint):', err.message);
+    try { db.run("ROLLBACK"); } catch (e) { }
+  }
+
   // Seed default users if table is empty
   const result = db.exec('SELECT COUNT(*) as count FROM users');
   const userCount = result[0]?.values[0][0] || 0;
