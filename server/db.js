@@ -409,80 +409,83 @@ export const initDb = async () => {
 
   // Migration: Update requests table CHECK constraint if needed
   try {
-    const tableSql = db.exec("SELECT sql FROM sqlite_master WHERE name='requests'")[0].values[0][0];
-    if (!tableSql.includes('PreSale Review') || !tableSql.includes('Sale Review') || !tableSql.includes('Accepted')) {
-      console.log('Updating requests table CHECK constraint...');
+    const tableInfo = db.exec("SELECT sql FROM sqlite_master WHERE name='requests'")[0];
+    if (tableInfo && tableInfo.values && tableInfo.values[0]) {
+      const tableSql = tableInfo.values[0][0];
+      if (!tableSql.includes('PreSale Review') || !tableSql.includes('Sale Review') || !tableSql.includes('Accepted')) {
+        console.log('Updating requests table CHECK constraint...');
 
-      db.run("BEGIN TRANSACTION");
+        db.run("BEGIN TRANSACTION");
 
-      // 1. Rename old table
-      db.run("ALTER TABLE requests RENAME TO requests_old_constraint");
+        // 1. Rename old table
+        db.run("ALTER TABLE requests RENAME TO requests_old_constraint");
 
-      // 2. Create new table with correct constraint
-      db.run(`
-        CREATE TABLE requests(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      lead_id INTEGER NOT NULL,
-      created_by INTEGER NOT NULL,
-      project_name TEXT,
-      status TEXT NOT NULL DEFAULT 'New' CHECK(status IN('New', 'Pending Review', 'Reviewing', 'Rejected', 'Pending Estimation', 'Estimated', 'PreSale Review', 'Sale Review', 'Accepted', 'Contract')),
-      cooperation_model TEXT,
-      work_type TEXT,
-      tech_stack TEXT,
-      hourly_rate REAL,
-      budget TEXT,
-      timeframe TEXT,
-      deadline TEXT,
-      start_date TEXT,
-      team_need TEXT,
-      english_level TEXT,
-      meetings TEXT,
-      project_stage TEXT,
-      intro_call_link TEXT,
-      call_summary TEXT,
-      presentation_link TEXT,
-      business_idea TEXT,
-      job_description TEXT,
-      design_link TEXT,
-      project_overview TEXT,
-      rejection_reason TEXT,
-      estimate_id INTEGER,
-      assigned_presale INTEGER,
-      assigned_techlead INTEGER,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(lead_id) REFERENCES leads(id) ON DELETE CASCADE,
-      FOREIGN KEY(created_by) REFERENCES users(id),
-      FOREIGN KEY(estimate_id) REFERENCES estimates(id),
-      FOREIGN KEY(assigned_presale) REFERENCES users(id),
-      FOREIGN KEY(assigned_techlead) REFERENCES users(id)
-    )
-    `);
+        // 2. Create new table with correct constraint
+        db.run(`
+          CREATE TABLE requests(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lead_id INTEGER NOT NULL,
+            created_by INTEGER NOT NULL,
+            project_name TEXT,
+            status TEXT NOT NULL DEFAULT 'New' CHECK(status IN('New', 'Pending Review', 'Reviewing', 'Rejected', 'Pending Estimation', 'Estimated', 'PreSale Review', 'Sale Review', 'Accepted', 'Contract')),
+            cooperation_model TEXT,
+            work_type TEXT,
+            tech_stack TEXT,
+            hourly_rate REAL,
+            budget TEXT,
+            timeframe TEXT,
+            deadline TEXT,
+            start_date TEXT,
+            team_need TEXT,
+            english_level TEXT,
+            meetings TEXT,
+            project_stage TEXT,
+            intro_call_link TEXT,
+            call_summary TEXT,
+            presentation_link TEXT,
+            business_idea TEXT,
+            job_description TEXT,
+            design_link TEXT,
+            project_overview TEXT,
+            rejection_reason TEXT,
+            estimate_id INTEGER,
+            assigned_presale INTEGER,
+            assigned_techlead INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+            FOREIGN KEY(created_by) REFERENCES users(id),
+            FOREIGN KEY(estimate_id) REFERENCES estimates(id),
+            FOREIGN KEY(assigned_presale) REFERENCES users(id),
+            FOREIGN KEY(assigned_techlead) REFERENCES users(id)
+          )
+        `);
 
-      // 3. Copy data
-      db.run(`
-        INSERT INTO requests(
-      id, lead_id, created_by, project_name, status, cooperation_model, work_type, tech_stack,
-      hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings,
-      project_stage, intro_call_link, call_summary, presentation_link, business_idea, job_description,
-      design_link, project_overview, rejection_reason, estimate_id, assigned_presale, assigned_techlead,
-      created_at, updated_at
-    )
-  SELECT
-  id, lead_id, created_by, project_name, status, cooperation_model, work_type, tech_stack,
-    hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings,
-    project_stage, intro_call_link, call_summary, presentation_link, business_idea, job_description,
-    design_link, project_overview, rejection_reason, estimate_id, assigned_presale, assigned_techlead,
-    created_at, updated_at
-        FROM requests_old_constraint
-    `);
+        // 3. Copy data
+        db.run(`
+          INSERT INTO requests(
+            id, lead_id, created_by, project_name, status, cooperation_model, work_type, tech_stack,
+            hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings,
+            project_stage, intro_call_link, call_summary, presentation_link, business_idea, job_description,
+            design_link, project_overview, rejection_reason, estimate_id, assigned_presale, assigned_techlead,
+            created_at, updated_at
+          )
+          SELECT
+            id, lead_id, created_by, project_name, status, cooperation_model, work_type, tech_stack,
+            hourly_rate, budget, timeframe, deadline, start_date, team_need, english_level, meetings,
+            project_stage, intro_call_link, call_summary, presentation_link, business_idea, job_description,
+            design_link, project_overview, rejection_reason, estimate_id, assigned_presale, assigned_techlead,
+            created_at, updated_at
+          FROM requests_old_constraint
+        `);
 
-      // 4. Drop old table
-      db.run("DROP TABLE requests_old_constraint");
+        // 4. Drop old table
+        db.run("DROP TABLE requests_old_constraint");
 
-      db.run("COMMIT");
-      saveDb();
-      console.log('✓ Successfully updated requests table CHECK constraint and kept all data');
+        db.run("COMMIT");
+        saveDb();
+        console.log('✓ Successfully updated requests table CHECK constraint and kept all data');
+      }
     }
   } catch (err) {
     console.log('Migration note (requests constraint):', err.message);
@@ -509,46 +512,49 @@ export const initDb = async () => {
 
   // Migration: Update estimate_requests table CHECK constraint and add rejection_reason
   try {
-    const tableSql = db.exec("SELECT sql FROM sqlite_master WHERE name='estimate_requests'")[0].values[0][0];
-    if (!tableSql.includes('rejection_reason') || !tableSql.includes('Changes Requested') || !tableSql.includes("'Approved'")) {
-      console.log('Updating estimate_requests table schema (adding Approved and rejection_reason)...');
+    const tableInfo = db.exec("SELECT sql FROM sqlite_master WHERE name='estimate_requests'")[0];
+    if (tableInfo && tableInfo.values && tableInfo.values[0]) {
+      const tableSql = tableInfo.values[0][0];
+      if (!tableSql.includes('rejection_reason') || !tableSql.includes('Changes Requested') || !tableSql.includes("'Approved'")) {
+        console.log('Updating estimate_requests table schema (adding Approved and rejection_reason)...');
 
-      db.run("BEGIN TRANSACTION");
+        db.run("BEGIN TRANSACTION");
 
-      // 1. Rename old table
-      db.run("ALTER TABLE estimate_requests RENAME TO estimate_requests_old_constraint_v2");
+        // 1. Rename old table
+        db.run("ALTER TABLE estimate_requests RENAME TO estimate_requests_old_constraint_v2");
 
-      // 2. Create new table with correct constraint
-      db.run(`
-        CREATE TABLE estimate_requests(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          project_id INTEGER NOT NULL,
-          requested_by INTEGER NOT NULL,
-          scope_description TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN('Pending', 'In Progress', 'Pending Review', 'Changes Requested', 'Approved', 'Completed', 'Cancelled')),
-          rejection_reason TEXT,
-          estimate_id INTEGER,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY(project_id) REFERENCES projects(id),
-          FOREIGN KEY(requested_by) REFERENCES users(id),
-          FOREIGN KEY(estimate_id) REFERENCES estimates(id)
-        )
-      `);
+        // 2. Create new table with correct constraint
+        db.run(`
+          CREATE TABLE estimate_requests(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            requested_by INTEGER NOT NULL,
+            scope_description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN('Pending', 'In Progress', 'Pending Review', 'Changes Requested', 'Approved', 'Completed', 'Cancelled')),
+            rejection_reason TEXT,
+            estimate_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(project_id) REFERENCES projects(id),
+            FOREIGN KEY(requested_by) REFERENCES users(id),
+            FOREIGN KEY(estimate_id) REFERENCES estimates(id)
+          )
+        `);
 
-      // 3. Copy data
-      db.run(`
-        INSERT INTO estimate_requests(id, project_id, requested_by, scope_description, status, rejection_reason, estimate_id, created_at, updated_at)
-        SELECT id, project_id, requested_by, scope_description, status, rejection_reason, estimate_id, created_at, updated_at
-        FROM estimate_requests_old_constraint_v2
-      `);
+        // 3. Copy data
+        db.run(`
+          INSERT INTO estimate_requests(id, project_id, requested_by, scope_description, status, rejection_reason, estimate_id, created_at, updated_at)
+          SELECT id, project_id, requested_by, scope_description, status, rejection_reason, estimate_id, created_at, updated_at
+          FROM estimate_requests_old_constraint_v2
+        `);
 
-      // 4. Drop old table
-      db.run("DROP TABLE estimate_requests_old_constraint_v2");
+        // 4. Drop old table
+        db.run("DROP TABLE estimate_requests_old_constraint_v2");
 
-      db.run("COMMIT");
-      saveDb();
-      console.log('✓ Successfully updated estimate_requests table CHECK constraint');
+        db.run("COMMIT");
+        saveDb();
+        console.log('✓ Successfully updated estimate_requests table CHECK constraint');
+      }
     }
   } catch (err) {
     console.log('Migration note (estimate_requests constraint):', err.message);
@@ -585,45 +591,63 @@ export const initDb = async () => {
     )
   `);
 
+  // Notifications table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('status_change', 'mention', 'comment', 'assignment')),
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('request', 'estimate')),
+      entity_id INTEGER NOT NULL,
+      message TEXT NOT NULL,
+      read BOOLEAN DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
   // Migration: Update notifications table CHECK constraint if needed
   try {
-    const tableSql = db.exec("SELECT sql FROM sqlite_master WHERE name='notifications'")[0].values[0][0];
-    if (!tableSql.includes('estimate_request')) {
-      console.log('Updating notifications table CHECK constraint...');
+    const tableInfo = db.exec("SELECT sql FROM sqlite_master WHERE name='notifications'")[0];
+    if (tableInfo && tableInfo.values && tableInfo.values[0]) {
+      const tableSql = tableInfo.values[0][0];
+      if (!tableSql.includes('estimate_request')) {
+        console.log('Updating notifications table CHECK constraint...');
 
-      db.run("BEGIN TRANSACTION");
+        db.run("BEGIN TRANSACTION");
 
-      // 1. Rename old table
-      db.run("ALTER TABLE notifications RENAME TO notifications_old_constraint");
+        // 1. Rename old table
+        db.run("ALTER TABLE notifications RENAME TO notifications_old_constraint");
 
-      // 2. Create new table with correct constraint
-      db.run(`
-        CREATE TABLE notifications (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          type TEXT NOT NULL CHECK(type IN ('status_change', 'mention', 'comment', 'assignment')),
-          entity_type TEXT NOT NULL CHECK(entity_type IN ('request', 'estimate', 'estimate_request')),
-          entity_id INTEGER NOT NULL,
-          message TEXT NOT NULL,
-          read BOOLEAN DEFAULT 0,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-      `);
+        // 2. Create new table with correct constraint
+        db.run(`
+          CREATE TABLE notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('status_change', 'mention', 'comment', 'assignment')),
+            entity_type TEXT NOT NULL CHECK(entity_type IN ('request', 'estimate', 'estimate_request')),
+            entity_id INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            read BOOLEAN DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+          )
+        `);
 
-      // 3. Copy data
-      db.run(`
-        INSERT INTO notifications(id, user_id, type, entity_type, entity_id, message, read, created_at)
-        SELECT id, user_id, type, entity_type, entity_id, message, read, created_at
-        FROM notifications_old_constraint
-      `);
+        // 3. Copy data
+        db.run(`
+          INSERT INTO notifications(id, user_id, type, entity_type, entity_id, message, read, created_at)
+          SELECT id, user_id, type, entity_type, entity_id, message, read, created_at
+          FROM notifications_old_constraint
+        `);
 
-      // 4. Drop old table
-      db.run("DROP TABLE notifications_old_constraint");
+        // 4. Drop old table
+        db.run("DROP TABLE notifications_old_constraint");
 
-      db.run("COMMIT");
-      saveDb();
-      console.log('✓ Successfully updated notifications table CHECK constraint');
+        db.run("COMMIT");
+        saveDb();
+        console.log('✓ Successfully updated notifications table CHECK constraint');
+      }
     }
   } catch (err) {
     console.log('Migration note (notifications constraint):', err.message);
