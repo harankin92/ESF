@@ -49,60 +49,24 @@ app.get('/api/health', (req, res) => {
 });
 
 // Initialize database and start server
-initDb().then(() => {
-    httpServer.listen(PORT, () => {
-        console.log(`
+const startServer = async () => {
+    try {
+        console.log('🔄 Initializing database...');
+        await initDb();
+        console.log('✅ Database initialized successfully.');
+
+        httpServer.listen(PORT, () => {
+            console.log(`
   🚀 ESF Server running on http://localhost:${PORT}
   🔌 WebSocket ready for real-time notifications
-  
-  Lead Endpoints (basic client info):
-  - GET  /api/leads          - List leads
-  - POST /api/leads          - Create lead (Sale)
-  - GET  /api/leads/:id      - Get lead with requests
-  - PUT  /api/leads/:id      - Update lead
-  - DELETE /api/leads/:id    - Delete lead
-  
-  Request Endpoints (project details, 1 Lead -> N Requests):
-  - GET  /api/requests          - List requests
-  - POST /api/requests          - Create request (Sale)
-  - GET  /api/requests/:id      - Get request
-  - PUT  /api/requests/:id      - Update request
-  - GET  /api/requests/by-lead/:leadId - Get requests for lead
-  - PUT  /api/requests/:id/send-to-review - Send to PreSale (Sale)
-  - PUT  /api/requests/:id/review   - Start reviewing (PreSale)
-  - PUT  /api/requests/:id/overview - Add overview (PreSale)
-  - PUT  /api/requests/:id/approve  - Approve (TechLead)
-  - PUT  /api/requests/:id/reject   - Reject (Sale)
-  - PUT  /api/requests/:id/contract - Convert to project (Sale)
-  - DELETE /api/requests/:id    - Delete request
-  
-  Comments & Notifications:
-  - GET  /api/comments/:entityType/:entityId - Get comments
-  - POST /api/comments - Create comment
-  - POST /api/comments/:id/attachments - Upload files
-  - GET  /api/notifications - Get user notifications
-  
-  Project Endpoints:
-  - GET  /api/projects       - List projects
-  - GET  /api/projects/:id   - Get project details
-  - PUT  /api/projects/:id   - Update project
-  
-  Estimate Endpoints:
-  - GET  /api/estimates      - List estimates
-  - POST /api/estimates      - Create estimate
-  - GET  /api/estimates/:id  - Get estimate
-  - PUT  /api/estimates/:id  - Update estimate
-  - DELETE /api/estimates/:id - Delete estimate
-  
-  Test Users:
-  - admin@test.com / admin123 (Admin)
-  - presale@test.com / presale123 (PreSale)
-  - techlead@test.com / techlead123 (TechLead)
-  - pm@test.com / pm123 (PM)
-  - sale@test.com / sale123 (Sale)
-    `);
-    });
-}).catch(err => {
-    console.error('Failed to initialize database:', err);
-    process.exit(1);
-});
+  🌍 CORS allowed for all origins in production
+  `);
+        });
+    } catch (error) {
+        console.error('❌ FATAL ERROR DURING STARTUP:');
+        console.error(error);
+        process.exit(1);
+    }
+};
+
+startServer();
