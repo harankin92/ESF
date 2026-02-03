@@ -24,6 +24,7 @@ import {
     MessageSquare,
     Search
 } from 'lucide-react';
+import { NotificationBell } from '../components/common/NotificationBell';
 
 const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOpenRequest, onOpenProject }) => {
     const { user, logout, canCreate, canEdit, canDelete, canCreateLead, canViewLeads, canViewEstimates } = useAuth();
@@ -74,7 +75,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                 setProjects(projectsData);
             }
 
-            if (user?.role === 'TechLead' || user?.role === 'Admin') {
+            if (user?.role === 'TechLead' || user?.role === 'Admin' || user?.role === 'PM') {
                 try {
                     const requestsData = await api.getEstimateRequests();
                     setEstimateRequests(requestsData);
@@ -133,6 +134,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
     const reviewingRequests = requests.filter(r => r.status === 'Reviewing');
     const presaleReviewRequests = requests.filter(r => r.status === 'PreSale Review');
     const saleReviewRequests = requests.filter(r => r.status === 'Sale Review');
+    const contractRequests = requests.filter(r => r.status === 'Contract');
     const rejectedRequests = requests.filter(r => r.status === 'Rejected' && r.created_by === user?.id);
     const myLeads = leads.filter(l => l.created_by === user?.id);
 
@@ -141,8 +143,12 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
 
         if (user?.role === 'Sale') {
             tabs.push({ id: 'leads', label: 'My Leads', icon: Briefcase, count: myLeads.length });
+            tabs.push({ id: 'pending-review', label: 'Pending Review', icon: FileText, count: pendingReviewRequests.length });
+            tabs.push({ id: 'pending', label: 'In Estimation', icon: Clock, count: pendingEstimationRequests.length });
+            tabs.push({ id: 'sale-review', label: 'Pending Approval', icon: Layers, count: saleReviewRequests.length });
+            tabs.push({ id: 'contract', label: 'Contract', icon: FileText, count: contractRequests.length });
             tabs.push({ id: 'rejected', label: 'Rejected', icon: AlertCircle, count: rejectedRequests.length });
-            tabs.push({ id: 'sale-review', label: 'Pending Approval', icon: FileText, count: saleReviewRequests.length });
+            tabs.push({ id: 'history', label: 'All Requests', icon: Briefcase, count: requests.length });
         } else if (user?.role === 'PreSale') {
             tabs.push({ id: 'pending-review', label: 'Pending Review', icon: FileText, count: pendingReviewRequests.length });
             tabs.push({ id: 'reviewing', label: 'Reviewing', icon: Clock, count: reviewingRequests.length });
@@ -156,10 +162,13 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
             tabs.push({ id: 'pending', label: 'Pending Estimation', icon: Clock, count: pendingEstimationRequests.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'TechLead') {
-            tabs.push({ id: 'project-requests', label: 'Pending Estimation from PM', icon: MessageSquare, count: estimateRequests.length });
+            const tlRequests = estimateRequests.filter(r => ['Pending', 'Changes Requested'].includes(r.status));
+            tabs.push({ id: 'project-requests', label: 'Pending Estimation from PM', icon: MessageSquare, count: tlRequests.length });
             tabs.push({ id: 'pending', label: 'Pending Estimation from Pre-Sale', icon: Clock, count: pendingEstimationRequests.length });
             tabs.push({ id: 'estimates', label: 'My Estimates', icon: Layers, count: estimates.length });
         } else if (user?.role === 'PM') {
+            const pmReviewRequests = estimateRequests.filter(r => r.status === 'Pending Review');
+            tabs.push({ id: 'reviews', label: 'To Review', icon: MessageSquare, count: pmReviewRequests.length });
             tabs.push({ id: 'projects', label: 'Projects', icon: FolderKanban, count: projects.length });
             tabs.push({ id: 'leads', label: 'All Leads', icon: Briefcase, count: leads.length });
             tabs.push({ id: 'estimates', label: 'Estimates', icon: Layers, count: estimates.length });
@@ -186,6 +195,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                     </div>
 
                     <div className="flex items-center gap-4">
+                        <NotificationBell />
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center">
                                 <User size={16} className="text-indigo-600 dark:text-indigo-400" />
@@ -334,7 +344,7 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                             </>
                         )}
 
-                        {/* Pending Review Tab (Requests) */}
+                        {/* Pending Review Tab (for PreSale/Sale) */}
                         {activeTab === 'pending-review' && (
                             <>
                                 {pendingReviewRequests.length === 0 ? (
@@ -360,10 +370,12 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                             </>
                         )}
 
+
+
                         {/* Project Estimate Requests Tab (for TechLead) */}
                         {activeTab === 'project-requests' && (
                             <>
-                                {estimateRequests.length === 0 ? (
+                                {estimateRequests.filter(r => ['Pending', 'Changes Requested'].includes(r.status)).length === 0 ? (
                                     <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                                         <MessageSquare size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
                                         <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No estimate requests</h3>
@@ -373,35 +385,52 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {estimateRequests.map(req => (
-                                            <div key={req.id} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full uppercase">
-                                                            {req.status}
-                                                        </span>
+                                        {estimateRequests
+                                            .filter(r => ['Pending', 'Changes Requested'].includes(r.status))
+                                            .map(req => (
+                                                <div key={req.id} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-3">
+                                                            <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold rounded-full uppercase">
+                                                                {req.status}
+                                                            </span>
+                                                        </div>
+                                                        <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2">
+                                                            {req.client_name || 'Project Estimate'} {req.project_name && `- ${req.project_name}`}
+                                                        </h3>
+                                                        <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-4">
+                                                            {req.scope_description}
+                                                        </p>
+                                                        {req.rejection_reason && (
+                                                            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded-lg">
+                                                                <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Reason for changes:</p>
+                                                                <p className="text-xs text-red-700 dark:text-red-400 font-medium line-clamp-2">
+                                                                    {req.rejection_reason}
+                                                                </p>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-2">
-                                                        {req.client_name || 'Project Estimate'} {req.project_name && `- ${req.project_name}`}
-                                                    </h3>
-                                                    <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-4">
-                                                        {req.scope_description}
-                                                    </p>
-                                                </div>
-                                                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                                    <div className="text-xs text-slate-400">
-                                                        By {req.requester_name || 'PM'} • {new Date(req.created_at).toLocaleDateString()}
+                                                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                                        <div className="text-xs text-slate-400">
+                                                            By {req.requester_name || 'PM'} • {new Date(req.created_at).toLocaleDateString()}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                const context = { requestId: req.id, projectId: req.project_id, type: 'project_estimate_request' };
+                                                                if (req.estimate_id) {
+                                                                    onOpenEstimate(req.estimate_id, context);
+                                                                } else {
+                                                                    onCreateNew(context);
+                                                                }
+                                                            }}
+                                                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
+                                                        >
+                                                            <Plus size={14} />
+                                                            {req.estimate_id ? 'Continue' : 'Start'}
+                                                        </button>
                                                     </div>
-                                                    <button
-                                                        onClick={() => onCreateNew({ requestId: req.id, projectId: req.project_id })}
-                                                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
-                                                    >
-                                                        <Plus size={14} />
-                                                        Start
-                                                    </button>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
                                     </div>
                                 )}
                             </>
@@ -433,6 +462,33 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                             </>
                         )}
 
+                        {/* Contract Tab */}
+                        {activeTab === 'contract' && (
+                            <>
+                                {contractRequests.length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <FileText size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No contracts yet</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            Requests converted to contract will appear here.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {contractRequests.map(request => (
+                                            <RequestCard
+                                                key={request.id}
+                                                request={request}
+                                                onClick={onOpenRequest}
+                                                onDelete={handleDeleteRequest}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+
                         {/* Rejected Tab (for Sale) */}
                         {activeTab === 'rejected' && (
                             <>
@@ -454,6 +510,35 @@ const Dashboard = ({ onOpenEstimate, onCreateNew, onOpenLead, onCreateLead, onOp
                                                 onDelete={handleDeleteRequest}
                                             />
                                         ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* Reviews Tab (PM) */}
+                        {activeTab === 'reviews' && (
+                            <>
+                                {estimateRequests.filter(r => r.status === 'Pending Review').length === 0 ? (
+                                    <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+                                        <MessageSquare size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                                        <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">No requests to review</h3>
+                                        <p className="text-slate-400 dark:text-slate-500 text-sm">
+                                            Good job! You're all caught up.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {estimateRequests
+                                            .filter(r => r.status === 'Pending Review')
+                                            .map(req => (
+                                                <RequestCard
+                                                    key={req.id}
+                                                    request={req}
+                                                    onClick={() => onOpenProject(req.project_id, 'estimates')}
+                                                    onDelete={handleDeleteRequest}
+                                                    userRole={user?.role}
+                                                />
+                                            ))}
                                     </div>
                                 )}
                             </>

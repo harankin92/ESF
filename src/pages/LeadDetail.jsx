@@ -14,6 +14,7 @@ import {
     Edit3,
     Trash2
 } from 'lucide-react';
+import { NotificationBell } from '../components/common/NotificationBell';
 
 const LeadDetail = ({ leadId, onBack, onOpenRequest, onCreateRequest, onEdit, onDelete }) => {
     const { user } = useAuth();
@@ -124,6 +125,7 @@ const LeadDetail = ({ leadId, onBack, onOpenRequest, onCreateRequest, onEdit, on
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <NotificationBell />
                         {canEdit() && (
                             <>
                                 <button

@@ -1,5 +1,6 @@
-import { Layers, Settings, Download, Clock, Database, MessageSquare, Save, ArrowLeft, Check, FileText, CheckCircle } from 'lucide-react';
+import { Layers, Settings, Download, Clock, Database, MessageSquare, Save, ArrowLeft, Check, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import ThemeToggle from '../common/ThemeToggle';
+import { NotificationBell } from '../common/NotificationBell';
 
 const Header = ({
     projectName,
@@ -11,6 +12,7 @@ const Header = ({
     onPrintReport,
     onSave,
     onApprove,
+    onRequestChanges,
     onBack,
     saving,
     saveMessage,
@@ -60,6 +62,7 @@ const Header = ({
                 </div>
                 <div className="flex items-center gap-3">
                     <ThemeToggle />
+                    <NotificationBell />
 
                     <button
                         onClick={() => setActiveTab('settings')}
@@ -91,6 +94,16 @@ const Header = ({
                                     <span className="font-semibold">Save</span>
                                 </>
                             )}
+                        </button>
+                    )}
+
+                    {onRequestChanges && (
+                        <button
+                            onClick={onRequestChanges}
+                            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl shadow-lg shadow-red-100 dark:shadow-none transition-all"
+                        >
+                            <AlertCircle size={18} />
+                            <span className="font-semibold">Request Changes</span>
                         </button>
                     )}
 

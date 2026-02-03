@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { NotificationsProvider } from './context/NotificationsContext';
 import { api } from './services/api';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -20,6 +21,7 @@ const AppContent = () => {
     const [currentLeadId, setCurrentLeadId] = useState(null);
     const [currentRequestId, setCurrentRequestId] = useState(null);
     const [currentProjectId, setCurrentProjectId] = useState(null);
+    const [currentProjectTab, setCurrentProjectTab] = useState(null);
     const [leadToEdit, setLeadToEdit] = useState(null);
     const [requestToEdit, setRequestToEdit] = useState(null);
     const [requestLeadId, setRequestLeadId] = useState(null);
@@ -131,9 +133,8 @@ const AppContent = () => {
         setCurrentEstimateId(id);
         if (context) {
             setEstimateContext({
-                requestId: context.id,
-                project_name: context.project_name,
-                client_name: context.client_name
+                ...context,
+                requestId: context.requestId || context.id
             });
         } else {
             setEstimateContext(null);
@@ -161,6 +162,7 @@ const AppContent = () => {
         setCurrentLeadId(null);
         setCurrentRequestId(null);
         setCurrentProjectId(null);
+        setCurrentProjectTab(null);
         setLeadToEdit(null);
         setRequestToEdit(null);
         setRequestLeadId(null);
@@ -216,8 +218,9 @@ const AppContent = () => {
         setView('request-form');
     };
 
-    const handleOpenProject = (id) => {
+    const handleOpenProject = (id, tab = null) => {
         setCurrentProjectId(id);
+        setCurrentProjectTab(tab);
         setView('project-detail');
     };
 
@@ -278,6 +281,7 @@ const AppContent = () => {
                 projectId={currentProjectId}
                 onBack={handleBack}
                 onOpenEstimate={handleOpenEstimate}
+                initialTab={currentProjectTab}
             />
         );
     }
@@ -321,7 +325,9 @@ const App = () => {
     return (
         <ThemeProvider>
             <AuthProvider>
-                <AppContent />
+                <NotificationsProvider>
+                    <AppContent />
+                </NotificationsProvider>
             </AuthProvider>
         </ThemeProvider>
     );

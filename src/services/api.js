@@ -1,4 +1,5 @@
 const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
+console.log('API Service Initialized. Using API_URL:', API_URL);
 
 const getToken = () => localStorage.getItem('token');
 
@@ -27,6 +28,14 @@ export const api = {
             headers: authHeaders()
         });
         if (!res.ok) return null;
+        return res.json();
+    },
+
+    async getUsers() {
+        const res = await fetch(`${API_URL}/auth/users`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch users');
         return res.json();
     },
 
@@ -278,6 +287,26 @@ export const api = {
         return res.json();
     },
 
+    async setRequestPriority(id, priority) {
+        const res = await fetch(`${API_URL}/requests/${id}/priority`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ priority })
+        });
+        if (!res.ok) throw new Error('Failed to set priority');
+        return res.json();
+    },
+
+    async setPresalePriority(id, presale_priority) {
+        const res = await fetch(`${API_URL}/requests/${id}/presale-priority`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ presale_priority })
+        });
+        if (!res.ok) throw new Error('Failed to set presale priority');
+        return res.json();
+    },
+
     // PreSale rejects request (needs more info from Sale)
     async presaleRejectRequest(id, rejection_reason) {
         const res = await fetch(`${API_URL}/requests/${id}/presale-reject`, {
@@ -514,6 +543,27 @@ export const api = {
         return res.json();
     },
 
+    async getProjectEstimateRequest(id) {
+        const res = await fetch(`${API_URL}/estimate-requests/${id}`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch estimate request');
+        return res.json();
+    },
+
+    async updateEstimateRequestStatus(requestId, status, rejection_reason = null) {
+        const res = await fetch(`${API_URL}/estimate-requests/${requestId}/status`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ status, rejection_reason })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update request status');
+        }
+        return res.json();
+    },
+
     async getProjectEstimates(projectId) {
         const res = await fetch(`${API_URL}/projects/${projectId}/estimates`, {
             headers: authHeaders()
@@ -530,22 +580,88 @@ export const api = {
         return res.json();
     },
 
-    // Request Prioritization
-    async setRequestPriority(id, priority) {
-        const res = await fetch(`${API_URL}/requests/${id}/set-priority`, {
-            method: 'PUT',
-            headers: authHeaders(),
-            body: JSON.stringify({ priority })
+    // Request Files
+    async uploadRequestFile(requestId, file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const res = await fetch(`${API_URL}/requests/${requestId}/files`, {
+                        method: 'POST',
+                        headers: authHeaders(),
+                        body: JSON.stringify({
+                            filename: file.name,
+                            file_type: file.type,
+                            file_size: file.size,
+                            data: reader.result
+                        })
+                    });
+                    if (!res.ok) {
+                        const text = await res.text();
+                        console.error('Upload file error response:', text);
+                        try {
+                            const error = JSON.parse(text);
+                            throw new Error(error.error || 'Failed to upload file');
+                        } catch (e) {
+                            throw new Error(`Failed to upload file: ${res.status} ${res.statusText}`);
+                        }
+                    }
+                    resolve(await res.json());
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.onerror = (error) => reject(error);
+            reader.readAsDataURL(file);
+        });
+    },
+
+    async getRequestFiles(requestId) {
+        const res = await fetch(`${API_URL}/requests/${requestId}/files`, {
+            headers: authHeaders()
         });
         if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error || 'Failed to set priority');
+            const text = await res.text();
+            console.error('Fetch files error response:', text);
+            try {
+                const error = JSON.parse(text);
+                throw new Error(error.error || 'Failed to fetch files');
+            } catch (e) {
+                throw new Error(`Failed to fetch files: ${res.status} ${res.statusText}`);
+            }
         }
         return res.json();
     },
 
+    async deleteRequestFile(fileId) {
+        const res = await fetch(`${API_URL}/requests/files/${fileId}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to delete file');
+        }
+        return res.json();
+    },
+
+    downloadRequestFileUrl(fileId) {
+        return `${API_URL}/requests/files/${fileId}`;
+    },
+
+    // Request Prioritization
+    async setRequestPriority(id, priority) {
+        const res = await fetch(`${API_URL}/requests/${id}/priority`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ priority })
+        });
+        if (!res.ok) throw new Error('Failed to set priority');
+        return res.json();
+    },
+
     async setRequestPresalePriority(id, presale_priority) {
-        const res = await fetch(`${API_URL}/requests/${id}/set-presale-priority`, {
+        const res = await fetch(`${API_URL}/requests/${id}/presale-priority`, {
             method: 'PUT',
             headers: authHeaders(),
             body: JSON.stringify({ presale_priority })
@@ -553,6 +669,153 @@ export const api = {
         if (!res.ok) {
             const error = await res.json();
             throw new Error(error.error || 'Failed to set presale priority');
+        }
+        return res.json();
+    },
+
+    // Comments
+    async getComments(entityType, entityId) {
+        const res = await fetch(`${API_URL}/comments/${entityType}/${entityId}`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch comments');
+        return res.json();
+    },
+
+    async createComment(entityType, entityId, content, mentionedUsers = []) {
+        const res = await fetch(`${API_URL}/comments`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ entityType, entityId, content, mentionedUsers })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to create comment');
+        }
+        return res.json();
+    },
+
+    async updateComment(id, content) {
+        const res = await fetch(`${API_URL}/comments/${id}`, {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ content })
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to update comment');
+        }
+        return res.json();
+    },
+
+    async deleteComment(id) {
+        const res = await fetch(`${API_URL}/comments/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to delete comment');
+        }
+        return res.json();
+    },
+
+    async uploadAttachments(commentId, files) {
+        console.log(`Uploading ${files.length} attachments for comment ${commentId}`);
+        const formData = new FormData();
+        for (const file of files) {
+            formData.append('files', file);
+        }
+
+        const res = await fetch(`${API_URL}/comments/${commentId}/attachments`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${getToken()}`
+            },
+            body: formData
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            console.error('Upload attachments error:', text);
+            try {
+                const error = JSON.parse(text);
+                throw new Error(error.error || 'Failed to upload attachments');
+            } catch (e) {
+                throw new Error(`Failed to upload attachments: ${res.status} ${res.statusText}`);
+            }
+        }
+        return res.json();
+    },
+
+    async downloadAttachment(attachmentId) {
+        const res = await fetch(`${API_URL}/attachments/${attachmentId}/download`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to download attachment');
+        return res.blob();
+    },
+
+    async deleteAttachment(id) {
+        const res = await fetch(`${API_URL}/attachments/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to delete attachment');
+        }
+        return res.json();
+    },
+
+    // Notifications
+    async getNotifications() {
+        const res = await fetch(`${API_URL}/notifications`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch notifications');
+        return res.json();
+    },
+
+    async getUnreadCount() {
+        const res = await fetch(`${API_URL}/notifications/unread/count`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) throw new Error('Failed to fetch unread count');
+        return res.json();
+    },
+
+    async markNotificationRead(id) {
+        const res = await fetch(`${API_URL}/notifications/${id}/read`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to mark as read');
+        }
+        return res.json();
+    },
+
+    async markAllNotificationsRead() {
+        const res = await fetch(`${API_URL}/notifications/read-all`, {
+            method: 'PUT',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to mark all as read');
+        }
+        return res.json();
+    },
+
+    async deleteNotification(id) {
+        const res = await fetch(`${API_URL}/notifications/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to delete notification');
         }
         return res.json();
     }

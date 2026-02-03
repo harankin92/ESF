@@ -2,9 +2,11 @@ import express from 'express';
 import {
     queryOne, queryAll, insertRequest, updateRequest,
     getRequestWithDetails, getRequestsByLead, getAllRequests, getRequestsByStatus, getRequestsByCreator,
-    run, insertProject
+    run, insertProject, insertNotification,
+    insertRequestFile, getRequestFiles, getRequestFile, deleteRequestFile
 } from '../db.js';
 import { authenticateToken, authorize } from '../middleware/auth.js';
+import { sendNotificationToUser, sendNotificationToUsers } from '../socket.js';
 
 const router = express.Router();
 
@@ -181,6 +183,22 @@ router.put('/:id/send-to-review', authenticateToken, authorize('Sale', 'Admin'),
         }
 
         const updated = updateRequest(req.params.id, { status: 'Pending Review', rejection_reason: null });
+
+        // Notify PreSale users
+        const presaleUsers = queryAll("SELECT id FROM users WHERE role = 'PreSale'");
+        const notificationMessage = `New request "${request.project_name || 'Untitled'}" is pending review`;
+
+        presaleUsers.forEach(user => {
+            insertNotification(user.id, 'status_change', 'request', req.params.id, notificationMessage);
+            sendNotificationToUser(req.io, user.id, {
+                type: 'status_change',
+                message: notificationMessage,
+                entityType: 'request',
+                entityId: req.params.id,
+                timestamp: new Date().toISOString()
+            });
+        });
+
         res.json(updated);
     } catch (error) {
         console.error('Send to review error:', error);
@@ -200,7 +218,7 @@ router.put('/:id/overview', authenticateToken, authorize('PreSale', 'Admin'), (r
             return res.status(400).json({ error: 'Can only add overview to requests being reviewed' });
         }
 
-        // Just save overview, don't change status yet
+        // Save overview ONLY (do not change status yet)
         const updated = updateRequest(req.params.id, {
             project_overview: req.body.project_overview
         });
@@ -223,6 +241,17 @@ router.put('/:id/review', authenticateToken, authorize('PreSale', 'Admin'), (req
         const updated = updateRequest(req.params.id, {
             status: 'Reviewing',
             assigned_presale: req.user.id
+        });
+
+        // Notify Creator (Sale)
+        const notificationMessage = `PreSale started reviewing your request "${request.project_name || 'Untitled'}"`;
+        insertNotification(request.created_by, 'status_change', 'request', req.params.id, notificationMessage);
+        sendNotificationToUser(req.io, request.created_by, {
+            type: 'status_change',
+            message: notificationMessage,
+            entityType: 'request',
+            entityId: req.params.id,
+            timestamp: new Date().toISOString()
         });
 
         res.json(updated);
@@ -254,6 +283,33 @@ router.put('/:id/approve', authenticateToken, authorize('TechLead', 'Admin'), (r
             assigned_techlead: req.user.id
         });
 
+        // Notify PreSale
+        const notificationMessage = `Estimate ready for request "${request.project_name || 'Untitled'}"`;
+
+        if (request.assigned_presale) {
+            insertNotification(request.assigned_presale, 'status_change', 'request', req.params.id, notificationMessage);
+            sendNotificationToUser(req.io, request.assigned_presale, {
+                type: 'status_change',
+                message: notificationMessage,
+                entityType: 'request',
+                entityId: req.params.id,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            // Notify all PreSales if no one assigned
+            const presaleUsers = queryAll("SELECT id FROM users WHERE role = 'PreSale'");
+            presaleUsers.forEach(user => {
+                insertNotification(user.id, 'status_change', 'request', req.params.id, notificationMessage);
+                sendNotificationToUser(req.io, user.id, {
+                    type: 'status_change',
+                    message: notificationMessage,
+                    entityType: 'request',
+                    entityId: req.params.id,
+                    timestamp: new Date().toISOString()
+                });
+            });
+        }
+
         res.json(updated);
     } catch (error) {
         console.error('Approve request error:', error);
@@ -278,6 +334,32 @@ router.put('/:id/reject', authenticateToken, authorize('Sale', 'Admin'), (req, r
             rejection_reason: req.body.rejection_reason || 'Rejected by Sale'
         });
 
+        // Notify PreSale
+        const notificationMessage = `Request "${request.project_name || 'Untitled'}" was rejected by Sale`;
+
+        if (request.assigned_presale) {
+            insertNotification(request.assigned_presale, 'status_change', 'request', req.params.id, notificationMessage);
+            sendNotificationToUser(req.io, request.assigned_presale, {
+                type: 'status_change',
+                message: notificationMessage,
+                entityType: 'request',
+                entityId: req.params.id,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            const presaleUsers = queryAll("SELECT id FROM users WHERE role = 'PreSale'");
+            presaleUsers.forEach(user => {
+                insertNotification(user.id, 'status_change', 'request', req.params.id, notificationMessage);
+                sendNotificationToUser(req.io, user.id, {
+                    type: 'status_change',
+                    message: notificationMessage,
+                    entityType: 'request',
+                    entityId: req.params.id,
+                    timestamp: new Date().toISOString()
+                });
+            });
+        }
+
         res.json(updated);
     } catch (error) {
         console.error('Sale reject error:', error);
@@ -300,6 +382,17 @@ router.put('/:id/presale-reject', authenticateToken, authorize('PreSale', 'Admin
         const updated = updateRequest(req.params.id, {
             status: 'Rejected',
             rejection_reason: req.body.rejection_reason || 'Needs more information'
+        });
+
+        // Notify Creator (Sale)
+        const notificationMessage = `PreSale rejected your request "${request.project_name || 'Untitled'}"`;
+        insertNotification(request.created_by, 'status_change', 'request', req.params.id, notificationMessage);
+        sendNotificationToUser(req.io, request.created_by, {
+            type: 'status_change',
+            message: notificationMessage,
+            entityType: 'request',
+            entityId: req.params.id,
+            timestamp: new Date().toISOString()
         });
 
         res.json(updated);
@@ -326,6 +419,22 @@ router.put('/:id/send-to-estimation', authenticateToken, authorize('PreSale', 'A
         }
 
         const updated = updateRequest(req.params.id, { status: 'Pending Estimation' });
+
+        // Notify TechLeads
+        const techLeads = queryAll("SELECT id FROM users WHERE role = 'TechLead'");
+        const notificationMessage = `New request "${request.project_name || 'Untitled'}" is pending estimation`;
+
+        techLeads.forEach(user => {
+            insertNotification(user.id, 'status_change', 'request', req.params.id, notificationMessage);
+            sendNotificationToUser(req.io, user.id, {
+                type: 'status_change',
+                message: notificationMessage,
+                entityType: 'request',
+                entityId: req.params.id,
+                timestamp: new Date().toISOString()
+            });
+        });
+
         res.json(updated);
     } catch (error) {
         console.error('Send to estimation error:', error);
@@ -346,6 +455,18 @@ router.put('/:id/presale-approve', authenticateToken, authorize('PreSale', 'Admi
         }
 
         const updated = updateRequest(req.params.id, { status: 'Sale Review' });
+
+        // Notify Creator (Sale)
+        const notificationMessage = `PreSale approved estimate for "${request.project_name || 'Untitled'}", pending your review`;
+        insertNotification(request.created_by, 'status_change', 'request', req.params.id, notificationMessage);
+        sendNotificationToUser(req.io, request.created_by, {
+            type: 'status_change',
+            message: notificationMessage,
+            entityType: 'request',
+            entityId: req.params.id,
+            timestamp: new Date().toISOString()
+        });
+
         res.json(updated);
     } catch (error) {
         console.error('PreSale approve error:', error);
@@ -369,6 +490,32 @@ router.put('/:id/presale-reject-estimate', authenticateToken, authorize('PreSale
             status: 'Pending Estimation',
             rejection_reason: req.body.rejection_reason || 'Estimate needs changes'
         });
+
+        // Notify TechLead
+        const notificationMessage = `Estimate rejected by PreSale for "${request.project_name || 'Untitled'}"`;
+
+        if (request.assigned_techlead) {
+            insertNotification(request.assigned_techlead, 'status_change', 'request', req.params.id, notificationMessage);
+            sendNotificationToUser(req.io, request.assigned_techlead, {
+                type: 'status_change',
+                message: notificationMessage,
+                entityType: 'request',
+                entityId: req.params.id,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            const techLeads = queryAll("SELECT id FROM users WHERE role = 'TechLead'");
+            techLeads.forEach(user => {
+                insertNotification(user.id, 'status_change', 'request', req.params.id, notificationMessage);
+                sendNotificationToUser(req.io, user.id, {
+                    type: 'status_change',
+                    message: notificationMessage,
+                    entityType: 'request',
+                    entityId: req.params.id,
+                    timestamp: new Date().toISOString()
+                });
+            });
+        }
 
         res.json(updated);
     } catch (error) {
@@ -493,6 +640,147 @@ router.delete('/:id', authenticateToken, (req, res) => {
     } catch (error) {
         console.error('Delete request error:', error);
         res.status(500).json({ error: 'Failed to delete request' });
+    }
+});
+
+// PUT /api/requests/:id/priority - Sale sets request priority
+router.put('/:id/priority', authenticateToken, authorize('Sale', 'Admin'), (req, res) => {
+    try {
+        const request = queryOne('SELECT * FROM requests WHERE id = ?', [req.params.id]);
+        if (!request) {
+            return res.status(404).json({ error: 'Request not found' });
+        }
+
+        const { priority } = req.body;
+        if (!['High', 'Medium', 'Low'].includes(priority)) {
+            return res.status(400).json({ error: 'Invalid priority value' });
+        }
+
+        const updated = updateRequest(req.params.id, { priority });
+        res.json(updated);
+    } catch (error) {
+        console.error('Set priority error:', error);
+        res.status(500).json({ error: 'Failed to set priority' });
+    }
+});
+
+// PUT /api/requests/:id/presale-priority - PreSale sets priority for TechLead
+router.put('/:id/presale-priority', authenticateToken, authorize('PreSale', 'Admin'), (req, res) => {
+    try {
+        const request = queryOne('SELECT * FROM requests WHERE id = ?', [req.params.id]);
+        if (!request) {
+            return res.status(404).json({ error: 'Request not found' });
+        }
+
+        const { presale_priority } = req.body;
+        if (!['High', 'Medium', 'Low'].includes(presale_priority)) {
+            return res.status(400).json({ error: 'Invalid priority value' });
+        }
+
+        const updated = updateRequest(req.params.id, { presale_priority });
+        res.json(updated);
+    } catch (error) {
+        console.error('Set presale priority error:', error);
+        res.status(500).json({ error: 'Failed to set presale priority' });
+    }
+});
+// Request Files Routes
+
+// POST /api/requests/:id/files - Upload file
+router.post('/:id/files', authenticateToken, (req, res) => {
+    try {
+        const { filename, file_type, file_size, data } = req.body;
+        if (!filename || !data) {
+            return res.status(400).json({ error: 'Filename and data are required' });
+        }
+
+        // Decode Base64 data
+        const buffer = Buffer.from(data.split(',')[1], 'base64');
+        const file = insertRequestFile(req.params.id, filename, file_type, file_size, buffer);
+
+        res.status(201).json(file);
+    } catch (error) {
+        console.error('Upload file error:', error);
+        res.status(500).json({ error: 'Failed to upload file' });
+    }
+});
+
+// GET /api/requests/:id/files - List files
+router.get('/:id/files', authenticateToken, (req, res) => {
+    try {
+        const files = getRequestFiles(req.params.id);
+        res.json(files);
+    } catch (error) {
+        console.error('List files error:', error);
+        res.status(500).json({ error: 'Failed to list files' });
+    }
+});
+
+// GET /api/requests/files/:fileId - Download file
+router.get('/files/:fileId', (req, res) => {
+    try {
+        const file = getRequestFile(req.params.fileId);
+        if (!file) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        res.setHeader('Content-Type', file.file_type);
+        res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+        res.send(file.data);
+    } catch (error) {
+        console.error('Download file error:', error);
+        res.status(500).json({ error: 'Failed to download file' });
+    }
+});
+
+// DELETE /api/requests/files/:fileId - Delete file
+router.delete('/files/:fileId', authenticateToken, (req, res) => {
+    try {
+        const file = getRequestFile(req.params.fileId);
+        if (!file) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        // Optional permission check: Ensure user owns the request or is Admin
+        // For now, allowing authenticated users to delete (or refine based on request ownership)
+
+        deleteRequestFile(req.params.fileId);
+        res.json({ message: 'File deleted successfully' });
+    } catch (error) {
+        console.error('Delete file error:', error);
+        res.status(500).json({ error: 'Failed to delete file' });
+    }
+});
+
+// PUT /api/requests/:id/priority - Sale sets priority (High/Medium/Low)
+router.put('/:id/priority', authenticateToken, authorize('Sale', 'PreSale', 'Admin'), (req, res) => {
+    try {
+        const { priority } = req.body;
+        if (!['High', 'Medium', 'Low'].includes(priority)) {
+            return res.status(400).json({ error: 'Invalid priority' });
+        }
+
+        const updated = updateRequest(req.params.id, { priority });
+        res.json(updated);
+    } catch (error) {
+        console.error('Set priority error:', error);
+        res.status(500).json({ error: 'Failed to set priority' });
+    }
+});
+
+// PUT /api/requests/:id/presale-priority - PreSale sets priority for TechLead
+router.put('/:id/presale-priority', authenticateToken, authorize('PreSale', 'Admin'), (req, res) => {
+    try {
+        const { priority } = req.body; // sending as 'priority' from frontend but mapping to 'presale_priority'
+        if (!['High', 'Medium', 'Low'].includes(priority)) {
+            return res.status(400).json({ error: 'Invalid priority' });
+        }
+
+        const updated = updateRequest(req.params.id, { presale_priority: priority });
+        res.json(updated);
+    } catch (error) {
+        console.error('Set presale priority error:', error);
+        res.status(500).json({ error: 'Failed to set presale priority' });
     }
 });
 

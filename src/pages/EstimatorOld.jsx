@@ -12,6 +12,8 @@ import PrintPreview from '../components/print/PrintPreview';
 import EstimationTab from '../components/estimation/EstimationTab';
 import LeadOverviewTab from '../components/tabs/LeadOverviewTab';
 
+import { CommentsList } from '../components/comments/CommentsList';
+
 const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = null, sourceLeadId = null, context = null }) => {
     // State
     const [projectName, setProjectName] = useState('New Project Estimate');
@@ -20,7 +22,9 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
     const [manualRoles, setManualRoles] = useState(DEFAULT_MANUAL_ROLES);
     const [techStack, setTechStack] = useState(DEFAULT_TECH_STACK);
     const [questions, setQuestions] = useState([]);
+    const [users, setUsers] = useState([]);
     const [qaPercent, setQaPercent] = useState(15);
+
     const [pmPercent, setPmPercent] = useState(10);
     const [qaRate, setQaRate] = useState(40);
     const [pmRate, setPmRate] = useState(45);
@@ -53,7 +57,12 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 }
 
                 if (reqId) {
-                    const reqData = await api.getRequest(reqId);
+                    let reqData;
+                    if (context?.type === 'project_estimate_request') {
+                        reqData = await api.getProjectEstimateRequest(reqId);
+                    } else {
+                        reqData = await api.getRequest(reqId);
+                    }
                     setLinkedRequest(reqData);
                 }
 
@@ -129,6 +138,18 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
             }
         }
     }, [context, estimateId, initialData]);
+
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                const data = await api.getUsers();
+                setUsers(data);
+            } catch (err) {
+                console.error('Failed to load users:', err);
+            }
+        };
+        loadUsers();
+    }, []);
 
     // Recalculate totals
     const totals = useTotals(sections, manualRoles, qaPercent, pmPercent, qaRate, pmRate, discount);
@@ -305,22 +326,62 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
         }
     };
 
+    const handleRequestChanges = async () => {
+        const requestId = context?.requestId || context?.id;
+        if (!requestId) return;
+
+        const reason = prompt('Please provide a reason for the changes requested:');
+        if (reason === null) return; // Cancelled
+        if (!reason.trim()) {
+            alert('A reason is required to request changes.');
+            return;
+        }
+
+        try {
+            await api.updateEstimateRequestStatus(requestId, 'Changes Requested', reason);
+            alert('Changes requested! Sent back to Tech Lead.');
+            if (onBack) onBack();
+        } catch (e) {
+            console.error(e);
+            alert('Failed to request changes: ' + e.message);
+        }
+    };
+
     const handleApprove = async () => {
         // Support both lead-based approval and request-based approval
         const canApproveLead = !!lead;
         const requestId = context?.requestId || context?.id;
         const canApproveRequest = !!requestId;
+        const isPMRequest = context?.type === 'project_estimate_request';
 
-        if (!canApproveLead && !canApproveRequest) return;
+        if (!canApproveLead && !canApproveRequest && !isPMRequest) return;
 
-        const confirmMsg = canApproveLead
-            ? 'Approve this estimation? Current lead status will be updated to "Estimated".'
-            : 'Complete this estimate request?';
+        let confirmMsg = 'Approve this estimation?';
+        if (canApproveLead) confirmMsg = 'Approve this estimation? Current lead status will be updated to "Estimated".';
+        else if (isPMRequest) {
+            if (user?.role === 'PM') confirmMsg = 'Approve this estimate and complete the request?';
+            else confirmMsg = 'Submit this estimate to PM for review?';
+        }
+        else if (canApproveRequest) confirmMsg = 'Complete this estimate request?';
+
         if (!confirm(confirmMsg)) return;
 
         try {
             const id = await handleSave();
             if (id) {
+                // PM Request Workflow
+                if (isPMRequest) {
+                    if (user?.role === 'PM') {
+                        await api.updateEstimateRequestStatus(requestId, 'Approved');
+                        alert('Estimate approved!');
+                    } else {
+                        await api.completeEstimateRequest(requestId, id);
+                        alert('Estimate sent to PM for review!');
+                    }
+                    if (onBack) onBack();
+                    return;
+                }
+
                 // If we have a lead, approve it
                 if (canApproveLead) {
                     await api.approveLead(lead.id, id);
@@ -344,6 +405,12 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
         setShowPreview(true);
     };
 
+    const isPMRequest = context?.type === 'project_estimate_request';
+    const isPMReview = user?.role === 'PM' && isPMRequest && linkedRequest?.status === 'Pending Review';
+    const isTechLeadAction = (user?.role === 'TechLead' || user?.role === 'Admin') &&
+        (lead || (context?.requestId && (!linkedRequest || ['Pending', 'Changes Requested'].includes(linkedRequest.status)))) &&
+        currentEstimateId;
+
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors duration-200">
             <Header
@@ -351,14 +418,21 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 setProjectName={setProjectName}
                 clientName={clientName}
                 onSave={handleSave}
-                onApprove={((user?.role === 'TechLead' || user?.role === 'Admin') && (lead || context?.requestId) && currentEstimateId) ? handleApprove : undefined}
+                onApprove={(isTechLeadAction || isPMReview) ? handleApprove : undefined}
+                onRequestChanges={isPMReview ? handleRequestChanges : undefined}
                 onPrint={handlePrint}
                 onBack={onBack}
                 saving={saving}
                 saveMessage={saveMessage}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
-                approveLabel={(context?.requestId || context?.id) ? 'Send to PreSale Review' : 'Approve'}
+                user={user}
+                approveLabel={
+                    isPMReview ? 'Approve Estimate' :
+                        (isPMRequest && isTechLeadAction) ? 'Submit to PM' :
+                            (context?.requestId || context?.id) ? 'Send to PreSale Review' :
+                                'Approve'
+                }
             />
 
             {linkedRequest?.rejection_reason && (user?.role === 'TechLead' || user?.role === 'Admin') && (
@@ -443,6 +517,17 @@ const Estimator = ({ user, onBack, onSaved, initialData = null, estimateId = nul
                 {activeTab === 'overview' && (
                     <div className="animate-slide-up">
                         <LeadOverviewTab lead={lead} />
+                    </div>
+                )}
+
+                {currentEstimateId && (
+                    <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 animate-slide-up">
+                        <CommentsList
+                            entityType="estimate"
+                            entityId={currentEstimateId}
+                            currentUser={user}
+                            users={users}
+                        />
                     </div>
                 )}
             </main>

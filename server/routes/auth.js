@@ -1,8 +1,8 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { queryOne } from '../db.js';
-import { JWT_SECRET } from '../middleware/auth.js';
+import { queryOne, queryAll } from '../db.js';
+import { JWT_SECRET, authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -61,6 +61,17 @@ router.get('/me', (req, res) => {
         res.json({ user: decoded });
     } catch (error) {
         res.status(403).json({ error: 'Invalid token' });
+    }
+});
+
+// GET /api/auth/users - Get all users (for mentions)
+router.get('/users', authenticateToken, (req, res) => {
+    try {
+        const users = queryAll('SELECT id, name, email, role FROM users ORDER BY name');
+        res.json(users);
+    } catch (error) {
+        console.error('Get users error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

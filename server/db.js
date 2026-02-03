@@ -293,6 +293,25 @@ export const initDb = async () => {
     try { db.run("ROLLBACK"); } catch (e) { }
   }
 
+  // Migration: Add priority columns to requests if not exist
+  try {
+    const tableInfo = db.exec("PRAGMA table_info(requests)");
+    const columns = tableInfo[0]?.values.map(col => col[1]) || [];
+
+    if (!columns.includes('priority')) {
+      db.run('ALTER TABLE requests ADD COLUMN priority TEXT CHECK(priority IN ("High", "Medium", "Low"))');
+      console.log('✓ Added priority column to requests');
+    }
+
+    if (!columns.includes('presale_priority')) {
+      db.run('ALTER TABLE requests ADD COLUMN presale_priority TEXT CHECK(presale_priority IN ("High", "Medium", "Low"))');
+      console.log('✓ Added presale_priority column to requests');
+    }
+    saveDb();
+  } catch (err) {
+    console.log('Migration note (requests priority):', err.message);
+  }
+
   // Projects table (1 Lead -> N Projects)
   db.run(`
     CREATE TABLE IF NOT EXISTS projects(
@@ -477,13 +496,121 @@ export const initDb = async () => {
       project_id INTEGER NOT NULL,
       requested_by INTEGER NOT NULL,
       scope_description TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN('Pending', 'In Progress', 'Completed', 'Cancelled')),
+      status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN('Pending', 'In Progress', 'Pending Review', 'Changes Requested', 'Approved', 'Completed', 'Cancelled')),
+      rejection_reason TEXT,
       estimate_id INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(project_id) REFERENCES projects(id),
       FOREIGN KEY(requested_by) REFERENCES users(id),
       FOREIGN KEY(estimate_id) REFERENCES estimates(id)
+    )
+  `);
+
+  // Migration: Update estimate_requests table CHECK constraint and add rejection_reason
+  try {
+    const tableSql = db.exec("SELECT sql FROM sqlite_master WHERE name='estimate_requests'")[0].values[0][0];
+    if (!tableSql.includes('rejection_reason') || !tableSql.includes('Changes Requested') || !tableSql.includes("'Approved'")) {
+      console.log('Updating estimate_requests table schema (adding Approved and rejection_reason)...');
+
+      db.run("BEGIN TRANSACTION");
+
+      // 1. Rename old table
+      db.run("ALTER TABLE estimate_requests RENAME TO estimate_requests_old_constraint_v2");
+
+      // 2. Create new table with correct constraint
+      db.run(`
+        CREATE TABLE estimate_requests(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL,
+          requested_by INTEGER NOT NULL,
+          scope_description TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Pending' CHECK(status IN('Pending', 'In Progress', 'Pending Review', 'Changes Requested', 'Approved', 'Completed', 'Cancelled')),
+          rejection_reason TEXT,
+          estimate_id INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(project_id) REFERENCES projects(id),
+          FOREIGN KEY(requested_by) REFERENCES users(id),
+          FOREIGN KEY(estimate_id) REFERENCES estimates(id)
+        )
+      `);
+
+      // 3. Copy data
+      db.run(`
+        INSERT INTO estimate_requests(id, project_id, requested_by, scope_description, status, rejection_reason, estimate_id, created_at, updated_at)
+        SELECT id, project_id, requested_by, scope_description, status, rejection_reason, estimate_id, created_at, updated_at
+        FROM estimate_requests_old_constraint_v2
+      `);
+
+      // 4. Drop old table
+      db.run("DROP TABLE estimate_requests_old_constraint_v2");
+
+      db.run("COMMIT");
+      saveDb();
+      console.log('✓ Successfully updated estimate_requests table CHECK constraint');
+    }
+  } catch (err) {
+    console.log('Migration note (estimate_requests constraint):', err.message);
+    try { db.run("ROLLBACK"); } catch (e) { }
+  }
+
+  // Comments table (for requests and estimates)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('request', 'estimate')),
+      entity_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      mentioned_users TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Attachments table (linked to comments)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      comment_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      filepath TEXT,
+      file_data BLOB,
+      filesize INTEGER NOT NULL,
+      mimetype TEXT NOT NULL,
+      uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Notifications table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('status_change', 'mention', 'comment', 'assignment')),
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('request', 'estimate')),
+      entity_id INTEGER NOT NULL,
+      message TEXT NOT NULL,
+      read BOOLEAN DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Request Files table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS request_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      file_type TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      data BLOB NOT NULL,
+      uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE
     )
   `);
 
@@ -823,7 +950,7 @@ export const getPendingEstimateRequests = () => {
     LEFT JOIN users u ON er.requested_by = u.id
     LEFT JOIN projects p ON er.project_id = p.id
     LEFT JOIN leads l ON p.lead_id = l.id
-    WHERE er.status = 'Pending'
+    WHERE er.status IN ('Pending', 'Pending Review', 'Changes Requested')
     ORDER BY er.created_at ASC
   `);
 };
@@ -847,4 +974,122 @@ export const getEstimatesByProject = (projectId) => {
     WHERE e.project_id = ?
     ORDER BY e.created_at DESC
       `, [projectId]);
+};
+
+// Comments helpers
+export const insertComment = (entityType, entityId, userId, content, mentionedUsers = null) => {
+  const mentionedJson = mentionedUsers ? JSON.stringify(mentionedUsers) : null;
+  db.run(
+    'INSERT INTO comments (entity_type, entity_id, user_id, content, mentioned_users) VALUES (?, ?, ?, ?, ?)',
+    [entityType, entityId, userId, content, mentionedJson]
+  );
+  saveDb();
+  return queryOne('SELECT * FROM comments WHERE entity_type = ? AND entity_id = ? ORDER BY id DESC LIMIT 1', [entityType, entityId]);
+};
+
+export const getCommentsByEntity = (entityType, entityId) => {
+  return queryAll(`
+    SELECT c.*, u.name as user_name, u.email as user_email
+    FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.entity_type = ? AND c.entity_id = ?
+    ORDER BY c.created_at ASC
+  `, [entityType, entityId]);
+};
+
+export const updateComment = (id, content) => {
+  db.run('UPDATE comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [content, id]);
+  saveDb();
+  return queryOne('SELECT * FROM comments WHERE id = ?', [id]);
+};
+
+export const deleteComment = (id) => {
+  db.run('DELETE FROM comments WHERE id = ?', [id]);
+  saveDb();
+};
+
+// Attachments helpers
+export const insertAttachment = (commentId, filename, filepath, filesize, mimetype, fileData = null) => {
+  db.run(
+    'INSERT INTO attachments (comment_id, filename, filepath, filesize, mimetype, file_data) VALUES (?, ?, ?, ?, ?, ?)',
+    [commentId, filename, filepath, filesize, mimetype, fileData]
+  );
+  saveDb();
+  return queryOne('SELECT * FROM attachments WHERE comment_id = ? ORDER BY id DESC LIMIT 1', [commentId]);
+};
+
+export const getAttachmentsByComment = (commentId) => {
+  return queryAll('SELECT * FROM attachments WHERE comment_id = ? ORDER BY uploaded_at ASC', [commentId]);
+};
+
+export const deleteAttachment = (id) => {
+  const attachment = queryOne('SELECT * FROM attachments WHERE id = ?', [id]);
+  if (attachment) {
+    db.run('DELETE FROM attachments WHERE id = ?', [id]);
+    saveDb();
+  }
+  return attachment;
+};
+
+// Notifications helpers
+export const insertNotification = (userId, type, entityType, entityId, message) => {
+  db.run(
+    'INSERT INTO notifications (user_id, type, entity_type, entity_id, message) VALUES (?, ?, ?, ?, ?)',
+    [userId, type, entityType, entityId, message]
+  );
+  saveDb();
+  return queryOne('SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 1', [userId]);
+};
+
+export const getNotificationsByUser = (userId) => {
+  return queryAll(`
+    SELECT * FROM notifications
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 50
+  `, [userId]);
+};
+
+export const markNotificationAsRead = (id) => {
+  db.run('UPDATE notifications SET read = 1 WHERE id = ?', [id]);
+  saveDb();
+  return queryOne('SELECT * FROM notifications WHERE id = ?', [id]);
+};
+
+export const markAllNotificationsAsRead = (userId) => {
+  db.run('UPDATE notifications SET read = 1 WHERE user_id = ?', [userId]);
+  saveDb();
+};
+
+export const deleteNotification = (id) => {
+  db.run('DELETE FROM notifications WHERE id = ?', [id]);
+  saveDb();
+};
+
+export const getUnreadNotificationCount = (userId) => {
+  const result = queryOne('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0', [userId]);
+  return result ? result.count : 0;
+};
+
+// Request Files helpers
+export const insertRequestFile = (requestId, filename, fileType, fileSize, data) => {
+  db.run(
+    'INSERT INTO request_files (request_id, filename, file_type, file_size, data) VALUES (?, ?, ?, ?, ?)',
+    [requestId, filename, fileType, fileSize, data]
+  );
+  saveDb();
+  return queryOne('SELECT id, request_id, filename, file_type, file_size, uploaded_at FROM request_files WHERE request_id = ? ORDER BY id DESC LIMIT 1', [requestId]);
+};
+
+export const getRequestFiles = (requestId) => {
+  return queryAll('SELECT id, request_id, filename, file_type, file_size, uploaded_at FROM request_files WHERE request_id = ? ORDER BY uploaded_at DESC', [requestId]);
+};
+
+export const getRequestFile = (fileId) => {
+  return queryOne('SELECT * FROM request_files WHERE id = ?', [fileId]);
+};
+
+export const deleteRequestFile = (fileId) => {
+  db.run('DELETE FROM request_files WHERE id = ?', [fileId]);
+  saveDb();
 };

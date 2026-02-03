@@ -49,6 +49,16 @@
   .delay-500 {
     animation-delay: 500ms;
   }
+
+  .no-spinner::-webkit-inner-spin-button,
+  .no-spinner::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .no-spinner {
+    -moz-appearance: textfield;
+  }
 }
 
 @keyframes slideUp {
@@ -145,4 +155,29 @@
   .print-bg-slate-50 {
     background-color: #f8fafc !important;
   }
+}
+
+/* TipTap Editor Styles */
+.ProseMirror {
+  @apply text-slate-900 dark:text-slate-100;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  @apply text-slate-400 dark:text-slate-500;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.ProseMirror .mention {
+  @apply bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded px-1 font-medium;
+}
+
+.ProseMirror:focus {
+  outline: none;
+}
+
+.mention-suggestions {
+  @apply fixed z-50;
 }

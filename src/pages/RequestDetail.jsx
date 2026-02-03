@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import StatusBadge from '../components/common/StatusBadge';
+import { CommentsList } from '../components/comments/CommentsList';
 import {
     ArrowLeft,
     Building2,
@@ -31,6 +32,8 @@ import {
     AlertTriangle,
     Calculator
 } from 'lucide-react';
+import { NotificationBell } from '../components/common/NotificationBell';
+import { RequestFiles } from '../components/requests/RequestFiles';
 
 const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, onEdit }) => {
     const { user } = useAuth();
@@ -59,6 +62,9 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
     // Sharing link
     const [shareLink, setShareLink] = useState('');
     const [showCopySuccess, setShowCopySuccess] = useState(false);
+
+    // Users for mentions
+    const [users, setUsers] = useState([]);
 
     const canEditRequest = (req) => {
         if (!req) return false;
@@ -96,9 +102,19 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
         }
     };
 
+    const loadUsers = async () => {
+        try {
+            const data = await api.getUsers();
+            setUsers(data);
+        } catch (err) {
+            console.error('Failed to load users:', err);
+        }
+    };
+
     useEffect(() => {
         loadRequest();
         loadEstimates();
+        loadUsers();
     }, [requestId]);
 
     const handleSendToReview = async () => {
@@ -238,7 +254,18 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
         try {
             await api.setRequestPriority(requestId, newPriority);
             setPriority(newPriority);
-            setSuccess('Priority updated!');
+            setSuccess(`Priority set to ${newPriority}`);
+            setTimeout(() => setSuccess(''), 2000);
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
+    const handleSetPresalePriority = async (newPriority) => {
+        try {
+            await api.setPresalePriority(requestId, newPriority);
+            setPresalePriority(newPriority);
+            setSuccess(`TechLead priority set to ${newPriority}`);
             setTimeout(() => setSuccess(''), 2000);
         } catch (err) {
             setError(err.message);
@@ -255,17 +282,6 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
             }, 1500);
         } catch (err) {
             setError('Failed to delete request: ' + err.message);
-        }
-    };
-
-    const handleSetPresalePriority = async (newPriority) => {
-        try {
-            await api.setRequestPresalePriority(requestId, newPriority);
-            setPresalePriority(newPriority);
-            setSuccess('Priority updated!');
-            setTimeout(() => setSuccess(''), 2000);
-        } catch (err) {
-            setError(err.message);
         }
     };
 
@@ -389,6 +405,7 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <NotificationBell />
                         {canEditRequest(request) && (
                             <button
                                 onClick={() => onEdit?.(request)}
@@ -1025,7 +1042,22 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
                                 </button>
                             </div>
                         )}
+
+                        {/* Files Section */}
+                        <div className="mb-8">
+                            <RequestFiles requestId={requestId} canEdit={canEditRequest(request) || isTechLead || isPreSale} />
+                        </div>
                     </div>
+                </div>
+
+                {/* Comments Section */}
+                <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 animate-slide-up">
+                    <CommentsList
+                        entityType="request"
+                        entityId={requestId}
+                        currentUser={user}
+                        users={users}
+                    />
                 </div>
             </main >
 

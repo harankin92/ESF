@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import StatusBadge from '../components/common/StatusBadge';
+import { CommentsList } from '../components/comments/CommentsList';
 import {
     ArrowLeft,
     Building2,
@@ -29,15 +30,17 @@ import {
     GitBranch,
     Server,
     Layers,
-    MessageSquare
+    MessageSquare,
+    AlertTriangle
 } from 'lucide-react';
+import { NotificationBell } from '../components/common/NotificationBell';
 
-const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
+const ProjectDetail = ({ projectId, onBack, onOpenEstimate, initialTab }) => {
     const { user } = useAuth();
     const [project, setProject] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState(initialTab || 'overview');
     const [saving, setSaving] = useState(false);
 
     // Credentials state
@@ -218,6 +221,24 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
         }
     };
 
+    const handleUpdateEstimateRequestStatus = async (requestId, status) => {
+        let reason = null;
+        if (status === 'Changes Requested') {
+            reason = prompt('Please provide a reason for the changes requested:');
+            if (reason === null) return; // Cancelled
+            if (!reason.trim()) {
+                alert('A reason is required to request changes.');
+                return;
+            }
+        }
+        try {
+            await api.updateEstimateRequestStatus(requestId, status, reason);
+            await loadEstimatesAndRequests();
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
     const tabs = [
         { id: 'overview', label: 'Overview', icon: FileText },
         { id: 'estimates', label: 'Estimates', icon: Layers },
@@ -271,50 +292,53 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
                     </div>
 
                     {/* Status Actions */}
-                    {canEditProject() && (
-                        <div className="flex items-center gap-2">
-                            {project.status === 'New' && (
-                                <button
-                                    onClick={() => handleStatusChange('Active')}
-                                    disabled={saving}
-                                    className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
-                                >
-                                    <Play size={16} />
-                                    Start Project
-                                </button>
-                            )}
-                            {project.status === 'Active' && (
-                                <>
+                    <div className="flex items-center gap-2">
+                        <NotificationBell />
+                        {canEditProject() && (
+                            <>
+                                {project.status === 'New' && (
                                     <button
-                                        onClick={() => handleStatusChange('Paused')}
+                                        onClick={() => handleStatusChange('Active')}
                                         disabled={saving}
-                                        className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
+                                        className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
                                     >
-                                        <Pause size={16} />
-                                        Pause
+                                        <Play size={16} />
+                                        Start Project
                                     </button>
+                                )}
+                                {project.status === 'Active' && (
+                                    <>
+                                        <button
+                                            onClick={() => handleStatusChange('Paused')}
+                                            disabled={saving}
+                                            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
+                                        >
+                                            <Pause size={16} />
+                                            Pause
+                                        </button>
+                                        <button
+                                            onClick={() => handleStatusChange('Finished')}
+                                            disabled={saving}
+                                            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
+                                        >
+                                            <CheckCircle size={16} />
+                                            Complete
+                                        </button>
+                                    </>
+                                )}
+                                {project.status === 'Paused' && (
                                     <button
-                                        onClick={() => handleStatusChange('Finished')}
+                                        onClick={() => handleStatusChange('Active')}
                                         disabled={saving}
-                                        className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
+                                        className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
                                     >
-                                        <CheckCircle size={16} />
-                                        Complete
+                                        <Play size={16} />
+                                        Resume
                                     </button>
-                                </>
-                            )}
-                            {project.status === 'Paused' && (
-                                <button
-                                    onClick={() => handleStatusChange('Active')}
-                                    disabled={saving}
-                                    className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all"
-                                >
-                                    <Play size={16} />
-                                    Resume
-                                </button>
-                            )}
-                        </div>
-                    )}
+                                )}
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 {/* Tabs */}
@@ -385,7 +409,7 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
                                     Linked Estimate
                                 </h3>
                                 <button
-                                    onClick={() => onOpenEstimate?.(project.estimate_id)}
+                                    onClick={() => onOpenEstimate?.(project.estimate_id, { projectId: project.id })}
                                     className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 hover:underline text-sm font-medium"
                                 >
                                     <ExternalLink size={16} />
@@ -482,9 +506,55 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
                                                     {req.scope_description}
                                                 </p>
                                                 {req.estimate_id && (
-                                                    <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
-                                                        <CheckCircle size={12} />
-                                                        Completed with Estimate #{req.estimate_id}
+                                                    <div className="mt-3">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <button
+                                                                onClick={() => onOpenEstimate?.(req.estimate_id, { requestId: req.id, type: 'project_estimate_request' })}
+                                                                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                                            >
+                                                                <ExternalLink size={12} />
+                                                                View Estimate #{req.estimate_id}
+                                                            </button>
+
+                                                            {req.status === 'Approved' && (
+                                                                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full uppercase">
+                                                                    <CheckCircle size={10} /> Approved
+                                                                </span>
+                                                            )}
+
+                                                            {req.status === 'Changes Requested' && (
+                                                                <div className="mt-2">
+                                                                    <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full uppercase w-fit">
+                                                                        <AlertTriangle size={10} /> Changes Requested
+                                                                    </span>
+                                                                    {req.rejection_reason && (
+                                                                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-400 font-medium">
+                                                                            Reason: {req.rejection_reason}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {req.status === 'Pending Review' && canEditProject() && (
+                                                            <div className="flex items-center gap-2 mt-2 p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-100 dark:border-purple-800/50">
+                                                                <div className="flex-1 text-xs text-purple-800 dark:text-purple-300 font-medium">
+                                                                    Review Estimate
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleUpdateEstimateRequestStatus(req.id, 'Changes Requested')}
+                                                                    className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                                                >
+                                                                    Request Changes
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleUpdateEstimateRequestStatus(req.id, 'Approved')}
+                                                                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+                                                                >
+                                                                    Approve
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -848,6 +918,16 @@ const ProjectDetail = ({ projectId, onBack, onOpenEstimate }) => {
                         )}
                     </div>
                 )}
+
+                {/* Comments Section */}
+                <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800 animate-slide-up">
+                    <CommentsList
+                        entityType="request"
+                        entityId={project.request_id}
+                        currentUser={user}
+                        users={[]} // Users list might need to be fetched or passed
+                    />
+                </div>
             </main>
         </div>
     );

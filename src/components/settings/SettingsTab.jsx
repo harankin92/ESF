@@ -62,7 +62,7 @@ const SettingsTab = ({
                                 max="100"
                                 value={discount}
                                 onChange={(e) => setDiscount(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
-                                className="w-20 font-black text-right text-lg text-indigo-600 dark:text-indigo-400 bg-transparent focus:outline-none"
+                                className="w-20 font-black text-right text-lg text-indigo-600 dark:text-indigo-400 bg-transparent focus:outline-none no-spinner"
                             />
                             <span className="font-bold text-slate-400 dark:text-slate-500">%</span>
                         </div>
@@ -83,7 +83,7 @@ const SettingsTab = ({
                                         type="number"
                                         value={qaPercent}
                                         onChange={(e) => setQaPercent(parseInt(e.target.value) || 0)}
-                                        className="w-16 p-1 border-none font-black text-right text-orange-600 dark:text-orange-400 bg-transparent focus:ring-0"
+                                        className="w-16 p-1 border-none font-black text-right text-orange-600 dark:text-orange-400 bg-transparent focus:ring-0 no-spinner"
                                     />
                                     <span className="font-bold text-orange-300 dark:text-orange-500/50">%</span>
                                 </div>
@@ -95,7 +95,7 @@ const SettingsTab = ({
                                         type="number"
                                         value={qaRate}
                                         onChange={(e) => setQaRate(parseInt(e.target.value) || 0)}
-                                        className="w-16 p-1 border-none font-black text-right text-orange-600 dark:text-orange-400 bg-transparent focus:ring-0"
+                                        className="w-16 p-1 border-none font-black text-right text-orange-600 dark:text-orange-400 bg-transparent focus:ring-0 no-spinner"
                                     />
                                     <span className="font-bold text-orange-300 dark:text-orange-500/50">$</span>
                                 </div>
@@ -117,7 +117,7 @@ const SettingsTab = ({
                                         type="number"
                                         value={pmPercent}
                                         onChange={(e) => setPmPercent(parseInt(e.target.value) || 0)}
-                                        className="w-16 p-1 border-none font-black text-right text-indigo-600 dark:text-indigo-400 bg-transparent focus:ring-0"
+                                        className="w-16 p-1 border-none font-black text-right text-indigo-600 dark:text-indigo-400 bg-transparent focus:ring-0 no-spinner"
                                     />
                                     <span className="font-bold text-indigo-300 dark:text-indigo-500/50">%</span>
                                 </div>
@@ -129,7 +129,7 @@ const SettingsTab = ({
                                         type="number"
                                         value={pmRate}
                                         onChange={(e) => setPmRate(parseInt(e.target.value) || 0)}
-                                        className="w-16 p-1 border-none font-black text-right text-indigo-600 dark:text-indigo-400 bg-transparent focus:ring-0"
+                                        className="w-16 p-1 border-none font-black text-right text-indigo-600 dark:text-indigo-400 bg-transparent focus:ring-0 no-spinner"
                                     />
                                     <span className="font-bold text-indigo-300 dark:text-indigo-500/50">$</span>
                                 </div>

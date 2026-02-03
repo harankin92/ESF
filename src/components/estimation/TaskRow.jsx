@@ -38,14 +38,14 @@ const TaskRow = ({ task, sectionId, manualRoles, qaPercent, pmPercent, onUpdateE
                     <div className="flex items-center justify-center gap-1.5">
                         <input
                             type="number"
-                            className="w-12 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 text-slate-900 dark:text-slate-100 transition-all"
+                            className="w-12 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 text-slate-900 dark:text-slate-100 transition-all no-spinner"
                             value={task.estimates[role.id]?.min || ''}
                             onChange={(e) => onUpdateEstimate(sectionId, task.id, role.id, 'min', e.target.value)}
                         />
                         <span className="text-slate-300 dark:text-slate-600 font-light">—</span>
                         <input
                             type="number"
-                            className="w-12 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 text-slate-900 dark:text-slate-100 transition-all"
+                            className="w-12 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold p-1.5 focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-700 text-slate-900 dark:text-slate-100 transition-all no-spinner"
                             value={task.estimates[role.id]?.max || ''}
                             onChange={(e) => onUpdateEstimate(sectionId, task.id, role.id, 'max', e.target.value)}
                         />
