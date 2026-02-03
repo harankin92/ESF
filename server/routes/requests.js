@@ -275,11 +275,11 @@ router.put('/:id/approve', authenticateToken, authorize('TechLead', 'Admin'), (r
         }
 
         const { estimate_id } = req.body;
-        console.log(`Approving request ${req.params.id} with estimate ${estimate_id}`);
+        console.log(`Approving request ${req.params.id} with estimate ${estimate_id || request.estimate_id}`);
 
         const updated = updateRequest(req.params.id, {
             status: 'PreSale Review',
-            estimate_id: estimate_id || null,
+            estimate_id: estimate_id || request.estimate_id || null,
             assigned_techlead: req.user.id
         });
 

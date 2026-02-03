@@ -147,12 +147,13 @@ const RequestDetail = ({ requestId, onBack, onOpenEstimate, onCreateEstimate, on
 
     const handleApprove = async () => {
         try {
-            if (!selectedEstimate) {
+            const estimateId = selectedEstimate || request.estimate_id;
+            if (!estimateId) {
                 alert('Please select an estimate first');
                 return;
             }
-            console.log('Frontend Approval Payload:', { requestId, selectedEstimate });
-            await api.approveRequest(requestId, selectedEstimate);
+            console.log('Frontend Approval Payload:', { requestId, estimateId });
+            await api.approveRequest(requestId, estimateId);
             setSuccess('Request approved and sent to Pre-Sale review!');
             setTimeout(() => {
                 loadRequest();
